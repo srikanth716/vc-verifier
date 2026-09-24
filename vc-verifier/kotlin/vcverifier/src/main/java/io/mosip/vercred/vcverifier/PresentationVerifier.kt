@@ -33,6 +33,7 @@ import io.mosip.vercred.vcverifier.constants.CredentialVerifierConstants.VERIFIA
 import io.mosip.vercred.vcverifier.constants.CredentialVerifierConstants.HOLDER_PROOF_MISSING_MSG
 import io.mosip.vercred.vcverifier.constants.CredentialVerifierConstants.INVALID_HOLDER_PROOF_MSG
 import io.mosip.vercred.vcverifier.constants.Shared.KEY_VERIFIABLE_CREDENTIAL
+import io.mosip.vercred.vcverifier.proof.DataIntegrityProofVerifier
 import io.mosip.vercred.vcverifier.data.PresentationVerificationResult
 import io.mosip.vercred.vcverifier.data.PresentationResultWithCredentialStatus
 import io.mosip.vercred.vcverifier.data.PresentationResultWithCredentialStatusV2
@@ -51,6 +52,7 @@ import io.mosip.vercred.vcverifier.exception.PublicKeyNotFoundException
 import io.mosip.vercred.vcverifier.exception.SignatureNotSupportedException
 import io.mosip.vercred.vcverifier.exception.SignatureVerificationException
 import io.mosip.vercred.vcverifier.exception.UnknownException
+import io.mosip.vercred.vcverifier.constants.JwkParams
 import io.mosip.vercred.vcverifier.keyResolver.PublicKeyResolverFactory
 import io.mosip.vercred.vcverifier.keyResolver.decompressP256Key
 import io.mosip.vercred.vcverifier.signature.impl.ED25519SignatureVerifierImpl
@@ -108,7 +110,12 @@ class PresentationVerifier {
         }
 
         return try {
-            if (verifyPresentationProof(vcJsonLdObject)) {
+            val proofVerified = if (DataIntegrityProofVerifier.isDataIntegrityProof(presentation)) {
+                verifyDataIntegrityPresentationProof(presentation)
+            } else {
+                verifyPresentationProof(vcJsonLdObject)
+            }
+            if (proofVerified) {
                 //perform holder binding check
                 return if (validateHolderBindingForDidKeyAndJwk(vcJsonLdObject).verificationStatus)
                     VPVerificationStatus.VALID
@@ -144,7 +151,11 @@ class PresentationVerifier {
             throw PresentationNotSupportedException("Unsupported VP Token type")
         }
         return try {
-            val isVerified = verifyPresentationProof(vcJsonLdObject)
+            val isVerified = if (DataIntegrityProofVerifier.isDataIntegrityProof(presentation)) {
+                verifyDataIntegrityPresentationProof(presentation)
+            } else {
+                verifyPresentationProof(vcJsonLdObject)
+            }
 
             if (isVerified) {
                 //perform holder binding check
@@ -410,20 +421,20 @@ class PresentationVerifier {
     }
 
     private fun comparePublicKeyJson(publicKeyJson1: JSONObject, publicKeyJson2: JSONObject): Boolean {
-        val keyType = publicKeyJson1.optString("kty")
-        if (keyType != publicKeyJson2.optString("kty")) return false
+        val keyType = publicKeyJson1.optString(JwkParams.KTY)
+        if (keyType != publicKeyJson2.optString(JwkParams.KTY)) return false
 
         return when (keyType) {
-            "EC" -> publicKeyJson1.optString("crv") == publicKeyJson2.optString("crv") &&
-                    publicKeyJson1.optString("x") == publicKeyJson2.optString("x") &&
-                    publicKeyJson1.optString("y") == publicKeyJson2.optString("y")
+            JwkParams.KEY_TYPE_EC -> publicKeyJson1.optString(JwkParams.CRV) == publicKeyJson2.optString(JwkParams.CRV) &&
+                    publicKeyJson1.optString(JwkParams.X) == publicKeyJson2.optString(JwkParams.X) &&
+                    publicKeyJson1.optString(JwkParams.Y) == publicKeyJson2.optString(JwkParams.Y)
 
-            "OKP" -> publicKeyJson1.optString("crv") == publicKeyJson2.optString("crv") &&
-                    publicKeyJson1.optString("x") == publicKeyJson2.optString("x")
+            JwkParams.KEY_TYPE_OKP -> publicKeyJson1.optString(JwkParams.CRV) == publicKeyJson2.optString(JwkParams.CRV) &&
+                    publicKeyJson1.optString(JwkParams.X) == publicKeyJson2.optString(JwkParams.X)
 
             // Only reachable via did:jwk; did:key RSA is not supported
-            "RSA" -> publicKeyJson1.optString("n") == publicKeyJson2.optString("n") &&
-                    publicKeyJson1.optString("e") == publicKeyJson2.optString("e")
+            JwkParams.KEY_TYPE_RSA -> publicKeyJson1.optString(JwkParams.N) == publicKeyJson2.optString(JwkParams.N) &&
+                    publicKeyJson1.optString(JwkParams.E) == publicKeyJson2.optString(JwkParams.E)
 
             else -> false
         }
@@ -434,6 +445,13 @@ class PresentationVerifier {
 
     private fun isP256KeyType(decodedKey: ByteArray) =
         decodedKey[0] == P256_KEY_PREFIX_FIRST && decodedKey[1] == P256_KEY_PREFIX_SECOND
+
+    private fun verifyDataIntegrityPresentationProof(presentation: String): Boolean {
+        return DataIntegrityProofVerifier.verify(
+            presentation,
+            expectedProofPurpose = "authentication"
+        )
+    }
 
     private fun verifyPresentationProof(vcJsonLdObject: JsonLDObject): Boolean {
 

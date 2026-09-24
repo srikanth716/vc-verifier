@@ -24,4 +24,5 @@ class PublicKeyResolverFactory {
             else -> throw PublicKeyTypeNotSupportedException("Public Key type is not supported")
         }
     }
+
 }

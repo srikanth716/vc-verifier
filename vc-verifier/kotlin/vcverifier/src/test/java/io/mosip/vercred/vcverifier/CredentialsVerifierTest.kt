@@ -3,6 +3,7 @@ package io.mosip.vercred.vcverifier
 import io.mockk.every
 import io.mockk.mockkObject
 import io.mockk.unmockkObject
+import io.mosip.vercred.vcverifier.constants.CredentialFormat.DC_SD_JWT
 import io.mosip.vercred.vcverifier.constants.CredentialFormat.LDP_VC
 import io.mosip.vercred.vcverifier.constants.CredentialFormat.MSO_MDOC
 import io.mosip.vercred.vcverifier.constants.CredentialFormat.VC_SD_JWT
@@ -15,6 +16,7 @@ import io.mosip.vercred.vcverifier.constants.CredentialVerifierConstants.ERROR_C
 import io.mosip.vercred.vcverifier.data.CredentialVerificationSummary
 import io.mosip.vercred.vcverifier.networkManager.NetworkManagerClient
 import io.mosip.vercred.vcverifier.utils.LocalDocumentLoader
+import io.mosip.vercred.vcverifier.utils.DateUtils
 import io.mosip.vercred.vcverifier.utils.Util
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -45,6 +47,22 @@ class CredentialsVerifierTest {
     @AfterAll
     fun teardownAll() {
         Util.documentLoader = null
+    }
+
+    /**
+     * The published SD-JWT fixture is signed by an external issuer (funke.animo.id) and its
+     * exp has since passed, so it cannot be re-issued locally. These tests cover SD-JWT and
+     * Key Binding JWT verification rather than expiry, so the expiry check is held open for
+     * their duration; expiry itself is covered by DateUtils' own tests.
+     */
+    private fun <T> ignoringCredentialExpiry(block: () -> T): T {
+        mockkObject(DateUtils)
+        every { DateUtils.isVCExpired(any()) } returns false
+        try {
+            return block()
+        } finally {
+            unmockkObject(DateUtils)
+        }
     }
 
     @Test
@@ -274,7 +292,9 @@ class CredentialsVerifierTest {
     fun `should verify SD-JWT with KB JWT when holder binding is not required`() {
         val vc = readClasspathFile("sd-jwt_vc/sdJwtWithKbJwtES256.txt")
 
-        val verificationResult = CredentialsVerifier().verify(vc, VC_SD_JWT, validateKeyBindingJwt = false)
+        val verificationResult = ignoringCredentialExpiry {
+            CredentialsVerifier().verify(vc, VC_SD_JWT, validateKeyBindingJwt = false)
+        }
 
         assertTrue(verificationResult.verificationStatus)
         assertEquals("", verificationResult.verificationMessage)
@@ -289,11 +309,13 @@ class CredentialsVerifierTest {
             every { Util.verifyJwt(any(), any(), any()) } returns true
             val vc = withFreshKbJwtIat(readClasspathFile("sd-jwt_vc/sdJwtWithKbJwtES256.txt"))
 
-        val result = CredentialsVerifier().verifyAndGetCredentialStatus(
-            vc,
-            VC_SD_JWT,
-            validateKeyBindingJwt = true
-        )
+        val result = ignoringCredentialExpiry {
+            CredentialsVerifier().verifyAndGetCredentialStatus(
+                vc,
+                VC_SD_JWT,
+                validateKeyBindingJwt = true
+            )
+        }
 
         assertTrue(result.verificationResult.verificationStatus)
         assertEquals("", result.verificationResult.verificationMessage)
@@ -313,5 +335,79 @@ class CredentialsVerifierTest {
         assertEquals("", verificationResult.verificationMessage)
         assertTrue(verificationResult.verificationStatus)
         assertEquals("", verificationResult.verificationErrorCode)
+    }
+
+    @Test
+    @Timeout(value = 10, unit = TimeUnit.SECONDS)
+    fun `verify SD-JWT without flag defaults to false and succeeds without KB-JWT`() {
+        val vc = readClasspathFile("sd-jwt_vc/sdJwtWithRootLevelSdNestedPayload.txt")
+
+        val verificationResult = CredentialsVerifier().verify(vc, VC_SD_JWT)
+
+        assertTrue(verificationResult.verificationStatus)
+        assertEquals("", verificationResult.verificationMessage)
+        assertEquals("", verificationResult.verificationErrorCode)
+    }
+
+    @Test
+    @Timeout(value = 10, unit = TimeUnit.SECONDS)
+    fun `verifyAndGetCredentialStatus SD-JWT without flag defaults to false and succeeds without KB-JWT`() {
+        val vc = readClasspathFile("sd-jwt_vc/sdJwtWithRootLevelSdNestedPayload.txt")
+
+        val result = CredentialsVerifier().verifyAndGetCredentialStatus(vc, VC_SD_JWT)
+
+        assertTrue(result.verificationResult.verificationStatus)
+        assertEquals("", result.verificationResult.verificationMessage)
+        assertEquals("", result.verificationResult.verificationErrorCode)
+    }
+
+    /**
+     * Credentials captured from live external issuers; see `sd-jwt_vc/FIXTURES.md` for provenance.
+     * Between them they cover both Issuer Signature Mechanisms the verifier supports — an `x5c`
+     * certificate across four certificate shapes, and a `kid` resolved against a DID in `iss`.
+     * None requires a network call: the key is either embedded in the certificate or derived from
+     * the self-certifying DID.
+     */
+    private fun verifyRealCredential(name: String) =
+        CredentialsVerifier().verify(readClasspathFile("sd-jwt_vc/$name").trim(), DC_SD_JWT)
+
+    @Test
+    fun `should verify a real credential whose x5c certificate has a SAN matching iss`() {
+        val result = verifyRealCredential("sdJwtVcWithX5cSanMatchingIss.txt")
+
+        assertTrue(result.verificationStatus)
+        assertEquals("", result.verificationErrorCode)
+    }
+
+    @Test
+    fun `should verify a real credential whose x5c certificate carries no SAN`() {
+        val result = verifyRealCredential("sdJwtVcWithX5cNoSan.txt")
+
+        assertTrue(result.verificationStatus)
+        assertEquals("", result.verificationErrorCode)
+    }
+
+    @Test
+    fun `should verify a real credential whose x5c certificate carries several SANs`() {
+        val result = verifyRealCredential("sdJwtVcWithX5cMultipleSans.txt")
+
+        assertTrue(result.verificationStatus)
+        assertEquals("", result.verificationErrorCode)
+    }
+
+    @Test
+    fun `should verify a real credential resolvable by either mechanism, through its x5c`() {
+        val result = verifyRealCredential("sdJwtVcResolvableByX5cAndKid.txt")
+
+        assertTrue(result.verificationStatus)
+        assertEquals("", result.verificationErrorCode)
+    }
+
+    @Test
+    fun `should verify a real credential whose issuer key comes from a did-key in iss`() {
+        val result = verifyRealCredential("sdJwtVcWithDidKeyIssuer.txt")
+
+        assertTrue(result.verificationStatus)
+        assertEquals("", result.verificationErrorCode)
     }
 }
