@@ -377,6 +377,29 @@ class MsoMdocValidatorTest {
         }
 
         @Test
+        fun `should throw ERR_INVALID_DATE_MSO not soft expiry when inverted window is fully in the past`() {
+            // Both dates past; validUntil before validFrom. Ordering must fail hard before ERR_VC_EXPIRED.
+            every { DateUtils.parseDate("2023-10-23T07:01:17Z") } returns Date(1698044477000L)
+            every { DateUtils.parseDate("2024-10-23T07:01:17Z") } returns Date(1729666877000L)
+            every { DateUtils.isFutureDateWithTolerance("2023-10-23T07:01:17Z") } returns false
+            every { DateUtils.isFutureDateWithTolerance("2024-10-23T07:01:17Z") } returns false
+
+            val mso = buildMso(
+                validFrom = taggedDate("2024-10-23T07:01:17Z"),
+                validUntil = taggedDate("2023-10-23T07:01:17Z"),
+                signed = taggedDate("2024-10-23T07:01:17Z")
+            )
+            val credential = buildMdocCredential(mso)
+
+            val verificationException = assertThrows(ValidationException::class.java) {
+                MsoMdocValidator().validate(credential)
+            }
+
+            assertEquals(ERROR_MESSAGE_INVALID_DATE_MSO, verificationException.errorMessage)
+            assertEquals(ERROR_CODE_INVALID_DATE_MSO, verificationException.errorCode)
+        }
+
+        @Test
         fun `should throw exception when validFrom is before signed in the latest MSO structure`() {
             every { DateUtils.parseDate("2024-10-23T07:01:17Z") } returns Date(1729666877000L)
             every { DateUtils.parseDate("2025-10-23T07:01:17Z") } returns Date(1761202877000L)

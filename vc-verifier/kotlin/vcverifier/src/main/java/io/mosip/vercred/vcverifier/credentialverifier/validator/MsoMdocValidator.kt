@@ -200,17 +200,19 @@ class MsoMdocValidator {
             )
         }
 
+        // Ordering must be checked before soft-expiry so an inverted window fails hard
+        // (ERR_INVALID_DATE_MSO) even when both dates are in the past.
+        if (!isValidUntilGreaterThanValidFrom) {
+            logger.severe("Error while doing validity verification - invalid validFrom / validUntil in the MSO of the credential")
+            throw ValidationException(ERROR_MESSAGE_INVALID_DATE_MSO, ERROR_CODE_INVALID_DATE_MSO)
+        }
+
         if (isValidUntilIsPastDate) {
             logger.severe("Error while doing validity verification - MSO validUntil is in the past")
             throw ValidationException(
                 ERROR_MESSAGE_VC_EXPIRED,
                 ERROR_CODE_VC_EXPIRED
             )
-        }
-
-        if (!isValidUntilGreaterThanValidFrom) {
-            logger.severe("Error while doing validity verification - invalid validFrom / validUntil in the MSO of the credential")
-            throw ValidationException(ERROR_MESSAGE_INVALID_DATE_MSO, ERROR_CODE_INVALID_DATE_MSO)
         }
     }
 

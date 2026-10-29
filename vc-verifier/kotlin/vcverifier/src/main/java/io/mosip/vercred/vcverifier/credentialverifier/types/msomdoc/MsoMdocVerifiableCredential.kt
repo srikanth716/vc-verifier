@@ -26,6 +26,8 @@ internal const val ISSUING_JURISDICTION = "issuing_jurisdiction"
 internal const val ISSUE_DATE = "issue_date"
 internal const val X5C = 33L
 internal const val COSE_ALG_HEADER_LABEL = 1L
+/** COSE algorithm identifier for ES256 (ECDSA w/ SHA-256). */
+internal const val COSE_ALG_ES256 = -7L
 internal const val DOC_TYPE = "docType"
 internal const val DIGEST_ALGORITHM = "digestAlgorithm"
 internal const val DIGEST_ID = "digestID"

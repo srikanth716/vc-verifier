@@ -8,6 +8,7 @@ import co.nstant.`in`.cbor.model.MajorType
 import co.nstant.`in`.cbor.model.Map
 import co.nstant.`in`.cbor.model.UnicodeString
 import co.nstant.`in`.cbor.model.UnsignedInteger
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_ALG
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_DIGEST_ID
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_DS_CERT_EKU
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_DS_CERT_KEY_USAGE
@@ -27,9 +28,11 @@ import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_ISSUER_SIGNED_ITEM
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_ISSUING_COUNTRY
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_ISSUING_JURISDICTION
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_MSO_ALG
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_SIGNED_OUTSIDE_DS_CERT
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_VALUE_DIGESTS
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_MISSING_ALG
+import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.COSE_ALG_ES256
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.COSE_ALG_HEADER_LABEL
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.DIGEST_ALGORITHM
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.DIGEST_ID
@@ -132,6 +135,15 @@ internal class MsoMdocVerifier {
         }
         if (!protectedHeader.keys.contains(UnsignedInteger(COSE_ALG_HEADER_LABEL))) {
             throw ValidationException(ERROR_MESSAGE_MISSING_ALG, ERROR_CODE_MISSING_ALG)
+        }
+        // Only ES256 (COSE alg -7) is supported for mso_mdoc today (#300 out of scope: ES384/ES512/EdDSA).
+        val protectedAlg =
+            (protectedHeader[UnsignedInteger(COSE_ALG_HEADER_LABEL)]
+                as? co.nstant.`in`.cbor.model.Number)
+                ?.value
+                ?.toLong()
+        if (protectedAlg != COSE_ALG_ES256) {
+            throw ValidationException(ERROR_MESSAGE_INVALID_MSO_ALG, ERROR_CODE_INVALID_ALG)
         }
     }
 
@@ -271,13 +283,22 @@ internal class MsoMdocVerifier {
             )
         }
 
+        val issueLocalDate = try {
+            org.threeten.bp.LocalDate.parse(issueDate)
+        } catch (_: org.threeten.bp.format.DateTimeParseException) {
+            // Regex-only shape check can still admit impossible calendar dates (e.g. 2024-13-45).
+            throw ValidationException(
+                ERROR_MESSAGE_INVALID_ISSUE_DATE,
+                ERROR_CODE_INVALID_ISSUE_DATE
+            )
+        }
+
         val validFrom = (mso.getOrNull("validityInfo") as? Map)?.getOrNull("validFrom")
             ?: return
         val validFromDate = DateUtils.parseDate(validFrom.toString()) ?: return
         val validFromUtcDate = org.threeten.bp.Instant.ofEpochMilli(validFromDate.time)
             .atZone(org.threeten.bp.ZoneOffset.UTC)
             .toLocalDate()
-        val issueLocalDate = org.threeten.bp.LocalDate.parse(issueDate)
         if (issueLocalDate.isAfter(validFromUtcDate)) {
             throw ValidationException(
                 ERROR_MESSAGE_INVALID_ISSUE_DATE,

@@ -130,6 +130,9 @@ object CredentialValidatorConstants {
     const val ERROR_CODE_MISSING_ALG = "${ERROR_CODE_MISSING}ALG"
     const val ERROR_MESSAGE_MISSING_ALG = "alg is missing from the COSE protected header"
 
+    const val ERROR_CODE_INVALID_ALG = "${ERROR_CODE_INVALID}ALG"
+    const val ERROR_MESSAGE_INVALID_MSO_ALG = "alg must be ES256 (-7)"
+
     const val ERROR_CODE_INVALID_ISSUE_DATE = "${ERROR_CODE_INVALID}ISSUE_DATE"
     const val ERROR_MESSAGE_INVALID_ISSUE_DATE =
         "issue_date must not be after validFrom"

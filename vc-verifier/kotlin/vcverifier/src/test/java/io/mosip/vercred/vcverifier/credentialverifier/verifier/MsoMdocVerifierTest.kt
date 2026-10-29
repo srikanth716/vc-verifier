@@ -3,6 +3,7 @@ package io.mosip.vercred.vcverifier.credentialverifier.verifier
 import android.os.Build
 import co.nstant.`in`.cbor.CborEncoder
 import co.nstant.`in`.cbor.model.ByteString
+import co.nstant.`in`.cbor.model.NegativeInteger
 import co.nstant.`in`.cbor.model.UnsignedInteger
 import co.nstant.`in`.cbor.model.Array as CborArray
 import co.nstant.`in`.cbor.model.Map as CborMap
@@ -11,15 +12,19 @@ import io.mockk.clearAllMocks
 import io.mockk.every
 import io.mockk.mockkObject
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.MsoMdocVerifiableCredential
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_ALG
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_DIGEST_ID
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_DS_CERT_EKU
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_DS_CERT_VALIDITY
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_ISSUE_DATE
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_ISSUER_SIGNED_ITEM
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_ISSUING_COUNTRY
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_VALUE_DIGESTS
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_MISSING_ALG
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_DIGEST_ID
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_ISSUE_DATE
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_ISSUER_SIGNED_ITEM
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_MSO_ALG
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_MISSING_ALG
 import io.mosip.vercred.vcverifier.exception.InvalidPropertyException
 import io.mosip.vercred.vcverifier.exception.SignatureVerificationException
@@ -250,6 +255,86 @@ class MsoMdocVerifierTest {
         val validationException = invocationException.targetException as ValidationException
         assertEquals(ERROR_MESSAGE_MISSING_ALG, validationException.errorMessage)
         assertEquals(ERROR_CODE_MISSING_ALG, validationException.errorCode)
+    }
+
+    @Test
+    fun `should throw when protected header alg is not ES256`() {
+        val protectedHeaderBytes = ByteArrayOutputStream().also {
+            CborEncoder(it).encode(CborMap().apply {
+                // COSE ES384 (-35); mso_mdoc profile allows only ES256 (-7)
+                put(UnsignedInteger(1), NegativeInteger(-35))
+            })
+        }.toByteArray()
+        val issuerAuth = CborArray().apply {
+            add(ByteString(protectedHeaderBytes))
+            add(CborMap())
+            add(ByteString(ByteArray(0)))
+            add(ByteString(ByteArray(4)))
+        }
+
+        val verifier = MsoMdocVerifier()
+        val method = verifier.javaClass.getDeclaredMethod("verifyProtectedHeaderAlg", CborArray::class.java)
+        method.isAccessible = true
+
+        val invocationException = assertThrows(InvocationTargetException::class.java) {
+            method.invoke(verifier, issuerAuth)
+        }
+        val validationException = invocationException.targetException as ValidationException
+        assertEquals(ERROR_MESSAGE_INVALID_MSO_ALG, validationException.errorMessage)
+        assertEquals(ERROR_CODE_INVALID_ALG, validationException.errorCode)
+    }
+
+    @Test
+    fun `should accept protected header alg ES256`() {
+        val protectedHeaderBytes = ByteArrayOutputStream().also {
+            CborEncoder(it).encode(CborMap().apply {
+                put(UnsignedInteger(1), NegativeInteger(-7))
+            })
+        }.toByteArray()
+        val issuerAuth = CborArray().apply {
+            add(ByteString(protectedHeaderBytes))
+            add(CborMap())
+            add(ByteString(ByteArray(0)))
+            add(ByteString(ByteArray(4)))
+        }
+
+        val verifier = MsoMdocVerifier()
+        val method = verifier.javaClass.getDeclaredMethod("verifyProtectedHeaderAlg", CborArray::class.java)
+        method.isAccessible = true
+
+        assertDoesNotThrow { method.invoke(verifier, issuerAuth) }
+    }
+
+    @Test
+    fun `should throw ERR_INVALID_ISSUE_DATE for impossible calendar date`() {
+        val issuerSignedItem = CborMap().apply {
+            put(UnicodeString("digestID"), UnsignedInteger(1))
+            put(UnicodeString("random"), ByteString(ByteArray(16)))
+            put(UnicodeString("elementIdentifier"), UnicodeString("issue_date"))
+            put(UnicodeString("elementValue"), UnicodeString("2024-13-45"))
+        }
+        val itemBytes = ByteArrayOutputStream().also { CborEncoder(it).encode(issuerSignedItem) }.toByteArray()
+        val namespaces = CborMap().apply {
+            put(
+                UnicodeString("org.iso.18013.5.1"),
+                CborArray().apply { add(ByteString(itemBytes)) }
+            )
+        }
+
+        val verifier = MsoMdocVerifier()
+        val method = verifier.javaClass.getDeclaredMethod(
+            "verifyIssueDate",
+            CborMap::class.java,
+            CborMap::class.java
+        )
+        method.isAccessible = true
+
+        val invocationException = assertThrows(InvocationTargetException::class.java) {
+            method.invoke(verifier, CborMap(), namespaces)
+        }
+        val validationException = invocationException.targetException as ValidationException
+        assertEquals(ERROR_MESSAGE_INVALID_ISSUE_DATE, validationException.errorMessage)
+        assertEquals(ERROR_CODE_INVALID_ISSUE_DATE, validationException.errorCode)
     }
 
     @Test
