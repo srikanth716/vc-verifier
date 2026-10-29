@@ -137,12 +137,12 @@ internal class MsoMdocVerifier {
             throw ValidationException(ERROR_MESSAGE_MISSING_ALG, ERROR_CODE_MISSING_ALG)
         }
         // Only ES256 (COSE alg -7) is supported for mso_mdoc today (#300 out of scope: ES384/ES512/EdDSA).
+        // Compare the full BigInteger so unsigned wrap values (e.g. 2^64-7) are not narrowed to -7.
         val protectedAlg =
             (protectedHeader[UnsignedInteger(COSE_ALG_HEADER_LABEL)]
                 as? co.nstant.`in`.cbor.model.Number)
                 ?.value
-                ?.toLong()
-        if (protectedAlg != COSE_ALG_ES256) {
+        if (protectedAlg != java.math.BigInteger.valueOf(COSE_ALG_ES256)) {
             throw ValidationException(ERROR_MESSAGE_INVALID_MSO_ALG, ERROR_CODE_INVALID_ALG)
         }
     }

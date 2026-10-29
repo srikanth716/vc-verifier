@@ -285,6 +285,34 @@ class MsoMdocVerifierTest {
     }
 
     @Test
+    fun `should throw when protected header alg is unsigned wrap of ES256`() {
+        // 2^64 - 7 == 18446744073709551609; toLong() would narrow this to -7.
+        val wrapAroundAlg = java.math.BigInteger("18446744073709551609")
+        val protectedHeaderBytes = ByteArrayOutputStream().also {
+            CborEncoder(it).encode(CborMap().apply {
+                put(UnsignedInteger(1), UnsignedInteger(wrapAroundAlg))
+            })
+        }.toByteArray()
+        val issuerAuth = CborArray().apply {
+            add(ByteString(protectedHeaderBytes))
+            add(CborMap())
+            add(ByteString(ByteArray(0)))
+            add(ByteString(ByteArray(4)))
+        }
+
+        val verifier = MsoMdocVerifier()
+        val method = verifier.javaClass.getDeclaredMethod("verifyProtectedHeaderAlg", CborArray::class.java)
+        method.isAccessible = true
+
+        val invocationException = assertThrows(InvocationTargetException::class.java) {
+            method.invoke(verifier, issuerAuth)
+        }
+        val validationException = invocationException.targetException as ValidationException
+        assertEquals(ERROR_MESSAGE_INVALID_MSO_ALG, validationException.errorMessage)
+        assertEquals(ERROR_CODE_INVALID_ALG, validationException.errorCode)
+    }
+
+    @Test
     fun `should accept protected header alg ES256`() {
         val protectedHeaderBytes = ByteArrayOutputStream().also {
             CborEncoder(it).encode(CborMap().apply {
