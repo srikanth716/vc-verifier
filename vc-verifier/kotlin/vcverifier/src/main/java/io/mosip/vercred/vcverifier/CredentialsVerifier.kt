@@ -10,6 +10,7 @@ import io.mosip.vercred.vcverifier.credentialverifier.CredentialVerifierFactory
 import io.mosip.vercred.vcverifier.data.CredentialStatusResult
 import io.mosip.vercred.vcverifier.data.CredentialVerificationSummary
 import io.mosip.vercred.vcverifier.data.VerificationResult
+import io.mosip.vercred.vcverifier.exception.ValidationException
 import java.util.logging.Logger
 
 
@@ -67,6 +68,8 @@ class CredentialsVerifier {
                 ERROR_CODE_VERIFICATION_FAILED
             )
 
+        } catch (e: ValidationException) {
+            VerificationResult(false, e.errorMessage, e.errorCode)
         } catch (e: Exception) {
             val errorCode = validationStatus.validationErrorCode.takeIf { !it.isNullOrEmpty() }
                 ?: ERROR_CODE_VERIFICATION_FAILED

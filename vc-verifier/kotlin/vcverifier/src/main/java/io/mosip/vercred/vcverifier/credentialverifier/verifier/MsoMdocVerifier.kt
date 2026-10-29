@@ -1,7 +1,6 @@
 package io.mosip.vercred.vcverifier.credentialverifier.verifier
 
 import co.nstant.`in`.cbor.CborDecoder
-import co.nstant.`in`.cbor.CborEncoder
 import co.nstant.`in`.cbor.model.Array
 import co.nstant.`in`.cbor.model.ByteString
 import co.nstant.`in`.cbor.model.DataItem
@@ -9,12 +8,42 @@ import co.nstant.`in`.cbor.model.MajorType
 import co.nstant.`in`.cbor.model.Map
 import co.nstant.`in`.cbor.model.UnicodeString
 import co.nstant.`in`.cbor.model.UnsignedInteger
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_DIGEST_ID
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_DS_CERT_EKU
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_DS_CERT_KEY_USAGE
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_DS_CERT_VALIDITY
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_ISSUE_DATE
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_ISSUER_SIGNED_ITEM
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_ISSUING_COUNTRY
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_ISSUING_JURISDICTION
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_SIGNED_OUTSIDE_DS_CERT
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_VALUE_DIGESTS
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_MISSING_ALG
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_DIGEST_ID
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_DS_CERT_EKU
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_DS_CERT_KEY_USAGE
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_DS_CERT_VALIDITY
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_ISSUE_DATE
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_ISSUER_SIGNED_ITEM
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_ISSUING_COUNTRY
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_ISSUING_JURISDICTION
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_SIGNED_OUTSIDE_DS_CERT
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_VALUE_DIGESTS
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_MISSING_ALG
+import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.COSE_ALG_HEADER_LABEL
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.DIGEST_ALGORITHM
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.DIGEST_ID
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.DOCUMENTS
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.DOC_TYPE
+import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.EXTENDED_KEY_USAGE_OID
+import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.ISSUE_DATE
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.ISSUING_COUNTRY
+import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.ISSUING_JURISDICTION
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.IssuerSignedNamespaces
+import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.KEY_USAGE_OID
+import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.MDL_DOCTYPE
+import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.MDL_DS_EKU
+import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.MDL_NAMESPACE
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.MsoMdocVerifiableCredential
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.NAME_SPACES
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.VALUE_DIGESTS
@@ -30,21 +59,20 @@ import io.mosip.vercred.vcverifier.signature.SignatureVerifier
 import io.mosip.vercred.vcverifier.signature.impl.CoseSignatureVerifierImpl
 import io.mosip.vercred.vcverifier.utils.CborDataItemUtils
 import io.mosip.vercred.vcverifier.utils.CborDataItemUtils.getOrNull
+import io.mosip.vercred.vcverifier.utils.DateUtils
 import io.mosip.vercred.vcverifier.utils.Util
 import java.io.ByteArrayInputStream
-import java.io.ByteArrayOutputStream
+import java.security.MessageDigest
+import java.security.cert.CertificateExpiredException
+import java.security.cert.CertificateNotYetValidException
 import java.security.cert.X509Certificate
+import java.util.Date
 import java.util.logging.Logger
-import java.util.regex.Matcher
-import java.util.regex.Pattern
-import kotlin.run
+import javax.security.auth.x500.X500Principal
 
 internal class MsoMdocVerifier {
 
     private val logger = Logger.getLogger(MsoMdocVerifier::class.java.name)
-
-
-    private val util = Util
 
     fun verify(base64EncodedMdoc: String): Boolean {
         try {
@@ -54,6 +82,8 @@ internal class MsoMdocVerifier {
             )
             val issuerSigned = credentialData.issuerSigned
             val mobileSecurityObject = credentialData.mso
+            val issuerAuth = issuerSigned.issuerAuth
+                ?: throw SignatureVerificationException("issuerAuth is not available")
             /**
              * a) The DS certificate is authenticated.
              * b) The digital signature verifies with the public key provided in the DS certificate.
@@ -61,10 +91,14 @@ internal class MsoMdocVerifier {
              * d) The DocType in the MSO matches the relevant DocType in the “Documents” structure.
              */
 
-            return verifyCertificateChain(issuerSigned.issuerAuth!!)
-                    && verificationOfCoseSignature(issuerSigned.issuerAuth)
-                    && verifyValueDigests(issuerSigned.namespaces, mobileSecurityObject)
-                    && verifyDocType(decodedCredential, mobileSecurityObject, isLatest)
+            verifyCertificateChain(issuerAuth)
+            verifyProtectedHeaderAlg(issuerAuth)
+            val dsCertificate = verifyDsCertificate(issuerAuth, mobileSecurityObject)
+            verificationOfCoseSignature(issuerAuth, dsCertificate)
+            verifyValueDigests(issuerSigned.namespaces, mobileSecurityObject)
+            verifyDocType(decodedCredential, mobileSecurityObject, isLatest)
+            verifyMdlDataElements(mobileSecurityObject, issuerSigned.namespaces, dsCertificate)
+            return true
         } catch (exception: Exception) {
             when (exception) {
                 is SignatureVerificationException,
@@ -86,31 +120,178 @@ internal class MsoMdocVerifier {
         return true
     }
 
-    private fun verifyCountryName(
-        issuerAuth: DataItem,
+    private fun verifyProtectedHeaderAlg(issuerAuth: Array) {
+        val protectedHeaderItem = issuerAuth[0]
+        if (protectedHeaderItem !is ByteString || protectedHeaderItem.bytes.isEmpty()) {
+            throw ValidationException(ERROR_MESSAGE_MISSING_ALG, ERROR_CODE_MISSING_ALG)
+        }
+        val protectedHeader = try {
+            CborDecoder(ByteArrayInputStream(protectedHeaderItem.bytes)).decode()[0] as Map
+        } catch (exception: Exception) {
+            throw ValidationException(ERROR_MESSAGE_MISSING_ALG, ERROR_CODE_MISSING_ALG)
+        }
+        if (!protectedHeader.keys.contains(UnsignedInteger(COSE_ALG_HEADER_LABEL))) {
+            throw ValidationException(ERROR_MESSAGE_MISSING_ALG, ERROR_CODE_MISSING_ALG)
+        }
+    }
+
+    private fun verifyDsCertificate(issuerAuth: Array, mso: Map): X509Certificate {
+        val issuerCertificate = extractCertificate(issuerAuth)
+            ?: throw SignatureVerificationException(
+                "Error while doing COSE signature verification - certificate chain is empty"
+            )
+
+        try {
+            issuerCertificate.checkValidity(Date(System.currentTimeMillis()))
+        } catch (_: CertificateExpiredException) {
+            throw ValidationException(
+                ERROR_MESSAGE_INVALID_DS_CERT_VALIDITY,
+                ERROR_CODE_INVALID_DS_CERT_VALIDITY
+            )
+        } catch (_: CertificateNotYetValidException) {
+            throw ValidationException(
+                ERROR_MESSAGE_INVALID_DS_CERT_VALIDITY,
+                ERROR_CODE_INVALID_DS_CERT_VALIDITY
+            )
+        }
+
+        val docType = (mso.getOrNull(DOC_TYPE) as? UnicodeString)?.string
+        if (docType == MDL_DOCTYPE) {
+            verifyMdlDsCertificateProfile(issuerCertificate)
+        }
+
+        val signed = (mso.getOrNull("validityInfo") as? Map)?.getOrNull("signed")
+        if (signed != null) {
+            val signedDate = DateUtils.parseDate(signed.toString())
+                ?: throw ValidationException(
+                    ERROR_MESSAGE_INVALID_SIGNED_OUTSIDE_DS_CERT,
+                    ERROR_CODE_INVALID_SIGNED_OUTSIDE_DS_CERT
+                )
+            if (signedDate.before(issuerCertificate.notBefore) || signedDate.after(issuerCertificate.notAfter)) {
+                throw ValidationException(
+                    ERROR_MESSAGE_INVALID_SIGNED_OUTSIDE_DS_CERT,
+                    ERROR_CODE_INVALID_SIGNED_OUTSIDE_DS_CERT
+                )
+            }
+        }
+
+        return issuerCertificate
+    }
+
+    private fun verifyMdlDsCertificateProfile(issuerCertificate: X509Certificate) {
+        val criticalOids = issuerCertificate.criticalExtensionOIDs ?: emptySet()
+
+        val keyUsage = issuerCertificate.keyUsage
+        if (keyUsage == null || !keyUsage[0] || !criticalOids.contains(KEY_USAGE_OID)) {
+            throw ValidationException(
+                ERROR_MESSAGE_INVALID_DS_CERT_KEY_USAGE,
+                ERROR_CODE_INVALID_DS_CERT_KEY_USAGE
+            )
+        }
+
+        val extendedKeyUsage = try {
+            issuerCertificate.extendedKeyUsage
+        } catch (_: Exception) {
+            null
+        }
+        if (extendedKeyUsage == null ||
+            !extendedKeyUsage.contains(MDL_DS_EKU) ||
+            !criticalOids.contains(EXTENDED_KEY_USAGE_OID)
+        ) {
+            throw ValidationException(
+                ERROR_MESSAGE_INVALID_DS_CERT_EKU,
+                ERROR_CODE_INVALID_DS_CERT_EKU
+            )
+        }
+    }
+
+    private fun verifyMdlDataElements(
+        mso: Map,
         issuerSignedNamespaces: IssuerSignedNamespaces,
-    ): Boolean {
-
-        val issuerCertificate: X509Certificate = extractCertificate(issuerAuth)
-            ?: throw SignatureVerificationException("certificate chain is empty")
-        val subjectDN: String = issuerCertificate.subjectX500Principal.name
-        val countryName: String?
-
-        val countryNamePattern = "C=([^,]+)"
-        val pattern: Pattern = Pattern.compile(countryNamePattern)
-        val matcher: Matcher = pattern.matcher(subjectDN)
-
-        if (matcher.find()) {
-            countryName = matcher.group(1)
-        } else {
-            throw RuntimeException("CN not found in Subject DN of DS certificate")
+        dsCertificate: X509Certificate,
+    ) {
+        val docType = (mso.getOrNull(DOC_TYPE) as? UnicodeString)?.string
+        if (docType != MDL_DOCTYPE) {
+            return
         }
 
-        val issuingCountry: String = issuerSignedNamespaces.extractFieldValue(ISSUING_COUNTRY)
-        if (countryName == null || issuingCountry != countryName) {
-            throw InvalidPropertyException("Issuing country is not valid in the credential - Mismatch in credential data and DS certificate country name found")
+        verifyCountryName(dsCertificate, issuerSignedNamespaces)
+        verifyIssuingJurisdiction(dsCertificate, issuerSignedNamespaces)
+        verifyIssueDate(mso, issuerSignedNamespaces)
+    }
+
+    private fun verifyCountryName(
+        issuerCertificate: X509Certificate,
+        issuerSignedNamespaces: IssuerSignedNamespaces,
+    ) {
+        val countryName = extractDnAttribute(issuerCertificate.subjectX500Principal, "C")
+            ?: throw ValidationException(
+                ERROR_MESSAGE_INVALID_ISSUING_COUNTRY,
+                ERROR_CODE_INVALID_ISSUING_COUNTRY
+            )
+
+        val issuingCountry = issuerSignedNamespaces.extractFieldValue(
+            ISSUING_COUNTRY,
+            MDL_NAMESPACE
+        )
+        if (issuingCountry.isNullOrEmpty() || issuingCountry != countryName) {
+            throw ValidationException(
+                ERROR_MESSAGE_INVALID_ISSUING_COUNTRY,
+                ERROR_CODE_INVALID_ISSUING_COUNTRY
+            )
         }
-        return true
+    }
+
+    private fun verifyIssuingJurisdiction(
+        issuerCertificate: X509Certificate,
+        issuerSignedNamespaces: IssuerSignedNamespaces,
+    ) {
+        val stateOrProvinceName = extractDnAttribute(issuerCertificate.subjectX500Principal, "ST")
+            ?: return
+        val issuingJurisdiction = issuerSignedNamespaces.extractFieldValue(
+            ISSUING_JURISDICTION,
+            MDL_NAMESPACE
+        ) ?: return
+
+        if (issuingJurisdiction != stateOrProvinceName) {
+            throw ValidationException(
+                ERROR_MESSAGE_INVALID_ISSUING_JURISDICTION,
+                ERROR_CODE_INVALID_ISSUING_JURISDICTION
+            )
+        }
+    }
+
+    private fun verifyIssueDate(mso: Map, issuerSignedNamespaces: IssuerSignedNamespaces) {
+        val issueDate = issuerSignedNamespaces.extractFieldValue(ISSUE_DATE, MDL_NAMESPACE)
+            ?: return
+        if (!DateUtils.isIsoFullDate(issueDate)) {
+            throw ValidationException(
+                ERROR_MESSAGE_INVALID_ISSUE_DATE,
+                ERROR_CODE_INVALID_ISSUE_DATE
+            )
+        }
+
+        val validFrom = (mso.getOrNull("validityInfo") as? Map)?.getOrNull("validFrom")
+            ?: return
+        val validFromDate = DateUtils.parseDate(validFrom.toString()) ?: return
+        val validFromUtcDate = org.threeten.bp.Instant.ofEpochMilli(validFromDate.time)
+            .atZone(org.threeten.bp.ZoneOffset.UTC)
+            .toLocalDate()
+        val issueLocalDate = org.threeten.bp.LocalDate.parse(issueDate)
+        if (issueLocalDate.isAfter(validFromUtcDate)) {
+            throw ValidationException(
+                ERROR_MESSAGE_INVALID_ISSUE_DATE,
+                ERROR_CODE_INVALID_ISSUE_DATE
+            )
+        }
+    }
+
+    private fun extractDnAttribute(principal: X500Principal, attribute: String): String? {
+        val rdns = principal.name.split(",")
+        val prefix = "$attribute="
+        return rdns.map { it.trim() }
+            .firstOrNull { it.startsWith(prefix) }
+            ?.substring(prefix.length)
     }
 
     private fun verifyDocType(decodedCredential: Map, mso: Map, isLatest: Boolean): Boolean {
@@ -129,9 +310,10 @@ internal class MsoMdocVerifier {
         throw InvalidPropertyException("Property mismatch with docType in the credential")
     }
 
-    private fun verificationOfCoseSignature(issuerAuth: DataItem): Boolean {
-        val issuerCertificate: X509Certificate = extractCertificate(issuerAuth)
-            ?: throw SignatureVerificationException("Error while doing COSE signature verification - certificate chain is empty")
+    private fun verificationOfCoseSignature(
+        issuerAuth: DataItem,
+        issuerCertificate: X509Certificate,
+    ): Boolean {
         val signatureVerifier: SignatureVerifier = CoseSignatureVerifierImpl()
         return signatureVerifier.verify(
             issuerCertificate.publicKey,
@@ -169,47 +351,62 @@ internal class MsoMdocVerifier {
 
 
     private fun verifyValueDigests(issuerSignedNamespaces: Map, mso: Map): Boolean {
+        val digestAlgorithm = mso[DIGEST_ALGORITHM].toString()
+
         issuerSignedNamespaces.keys.forEach { namespace ->
-            run {
-                val namespaceData: List<DataItem> =
-                    ((issuerSignedNamespaces[namespace]) as Array).dataItems
-                val calculatedDigests = mutableMapOf<Number, ByteArray>()
-                val actualDigests = mutableMapOf<Number, ByteArray>()
+            val namespaceData: List<DataItem> =
+                ((issuerSignedNamespaces[namespace]) as Array).dataItems
+            val calculatedDigests = mutableMapOf<Number, ByteArray>()
 
-
-                namespaceData.forEach { issuerSignedItem ->
-                    val encodedIssuerSignedItem = ByteArrayOutputStream()
-                    CborEncoder(encodedIssuerSignedItem).encode(issuerSignedItem)
-                    val digestAlgorithm = mso[DIGEST_ALGORITHM].toString()
-                    val digest =
-                        util.calculateDigest(digestAlgorithm, encodedIssuerSignedItem)
-                    val decodedIssuerSignedItem =
-                        CborDecoder(ByteArrayInputStream((issuerSignedItem as ByteString).bytes)).decode()[0]
-                    val digestId: Number =
-                        (((decodedIssuerSignedItem as Map)[DIGEST_ID]) as UnsignedInteger).value
-
-                    calculatedDigests[digestId] = digest
+            val valueDigests: Map =
+                if ((mso[VALUE_DIGESTS] as Map).keys.contains(UnicodeString(NAME_SPACES))) {
+                    ((mso[VALUE_DIGESTS][NAME_SPACES] as Map)[namespace]) as Map
+                } else {
+                    ((mso[VALUE_DIGESTS] as Map)[namespace]) as Map
                 }
 
-                val valueDigests: Map =
-                    if ((mso[VALUE_DIGESTS] as Map).keys.contains(UnicodeString(NAME_SPACES))) {
-                        ((mso[VALUE_DIGESTS][NAME_SPACES] as Map)[namespace]) as Map
-                    } else {
-                        ((mso[VALUE_DIGESTS] as Map)[namespace]) as Map
-                    }
-
-                valueDigests.keys.forEach { digestId ->
-                    run {
-                        val digest: ByteArray = (valueDigests[digestId] as ByteString).bytes
-                        actualDigests[(digestId as UnsignedInteger).value] = digest
-                    }
+            namespaceData.forEach { issuerSignedItem ->
+                if (issuerSignedItem !is ByteString || issuerSignedItem.tag?.value != 24L) {
+                    throw ValidationException(
+                        ERROR_MESSAGE_INVALID_ISSUER_SIGNED_ITEM,
+                        ERROR_CODE_INVALID_ISSUER_SIGNED_ITEM
+                    )
                 }
 
-                for ((actualDigestId, actualDigest) in actualDigests) {
-                    if (!actualDigest.contentEquals(calculatedDigests[actualDigestId])) {
-                        logger.severe("Error while doing valueDigests verification - mismatch in digests found")
-                        throw LikelyTamperedException("valueDigests verification failed - mismatch in digests with $actualDigestId")
-                    }
+                // Hash IssuerSignedItemBytes: the tag-24 byte string as CBOR-encoded.
+                // For canonical encodings this matches the on-the-wire bytes.
+                val issuerSignedItemBytes = CborDataItemUtils.toByteArray(issuerSignedItem)
+                val digest = MessageDigest.getInstance(digestAlgorithm).digest(issuerSignedItemBytes)
+                val decodedIssuerSignedItem =
+                    CborDecoder(ByteArrayInputStream(issuerSignedItem.bytes)).decode()[0]
+                val digestId: Number =
+                    (((decodedIssuerSignedItem as Map)[DIGEST_ID]) as UnsignedInteger).value
+
+                if (calculatedDigests.containsKey(digestId)) {
+                    throw ValidationException(
+                        ERROR_MESSAGE_INVALID_DIGEST_ID,
+                        ERROR_CODE_INVALID_DIGEST_ID
+                    )
+                }
+                calculatedDigests[digestId] = digest
+            }
+
+            for ((calculatedDigestId, calculatedDigest) in calculatedDigests) {
+                val msoDigestItem = valueDigests.keys
+                    .map { it as UnsignedInteger }
+                    .firstOrNull { it.value == calculatedDigestId }
+                    ?.let { valueDigests[it] as? ByteString }
+                    ?: throw ValidationException(
+                        "$ERROR_MESSAGE_INVALID_VALUE_DIGESTS (digestID $calculatedDigestId)",
+                        ERROR_CODE_INVALID_VALUE_DIGESTS
+                    )
+
+                if (!calculatedDigest.contentEquals(msoDigestItem.bytes)) {
+                    logger.severe("Error while doing valueDigests verification - mismatch in digests found")
+                    throw ValidationException(
+                        "$ERROR_MESSAGE_INVALID_VALUE_DIGESTS (digestID $calculatedDigestId)",
+                        ERROR_CODE_INVALID_VALUE_DIGESTS
+                    )
                 }
             }
         }

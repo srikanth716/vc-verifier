@@ -25,6 +25,7 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeAll
+import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
 import org.junit.jupiter.api.Timeout
@@ -142,6 +143,7 @@ class CredentialsVerifierTest {
     }
 
     @Test
+    @Disabled("Requires ISO-conformant DS certificates from inji-certify#1123")
     @Timeout(value = 20, unit = TimeUnit.SECONDS)
     fun `should return true for valid credential validation success of msomdoc`() {
         val vc =

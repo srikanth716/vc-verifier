@@ -22,12 +22,22 @@ import java.util.logging.Logger
 
 internal const val DOCUMENTS = "documents"
 internal const val ISSUING_COUNTRY = "issuing_country"
+internal const val ISSUING_JURISDICTION = "issuing_jurisdiction"
+internal const val ISSUE_DATE = "issue_date"
 internal const val X5C = 33L
+internal const val COSE_ALG_HEADER_LABEL = 1L
 internal const val DOC_TYPE = "docType"
 internal const val DIGEST_ALGORITHM = "digestAlgorithm"
 internal const val DIGEST_ID = "digestID"
 internal const val VALUE_DIGESTS = "valueDigests"
 internal const val NAME_SPACES = "nameSpaces"
+internal const val MDL_DOCTYPE = "org.iso.18013.5.1.mDL"
+internal const val MDL_NAMESPACE = "org.iso.18013.5.1"
+internal const val MDL_DS_EKU = "1.0.18013.5.1.2"
+internal const val KEY_USAGE_OID = "2.5.29.15"
+internal const val EXTENDED_KEY_USAGE_OID = "2.5.29.37"
+internal const val MSO_VERSION_1_0 = "1.0"
+internal val SUPPORTED_DIGEST_ALGORITHMS = setOf("SHA-256", "SHA-384", "SHA-512")
 private const val ISSUER_SIGNED = "issuerSigned"
 
 
