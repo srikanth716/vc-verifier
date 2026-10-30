@@ -258,9 +258,9 @@ class MsoMdocVerifierTest {
     }
 
     @Test
-    fun `should fail user-provided certify mDL on missing mDL DS EKU`() {
+    fun `should Reject Mdl When Ds CertificateIs Missing Mdl Eku`() {
         val credential = javaClass.classLoader
-            .getResourceAsStream("mso_mdoc/user_provided_mdl.b64url")!!
+            .getResourceAsStream("mso_mdoc/valid_mdl_missing_ds_eku.b64url")!!
             .bufferedReader()
             .use { it.readText().trim() }
 
