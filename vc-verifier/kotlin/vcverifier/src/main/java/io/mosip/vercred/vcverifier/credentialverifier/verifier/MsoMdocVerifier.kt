@@ -455,12 +455,14 @@ internal class MsoMdocVerifier {
             }
             val calculatedDigests = mutableMapOf<Number, ByteArray>()
 
-            val valueDigests: Map =
-                if ((mso[VALUE_DIGESTS] as Map).keys.contains(UnicodeString(NAME_SPACES))) {
-                    ((mso[VALUE_DIGESTS][NAME_SPACES] as Map)[namespaceKey]) as Map
-                } else {
-                    ((mso[VALUE_DIGESTS] as Map)[namespaceKey]) as Map
-                }
+            val digestsByNamespace: Map = (mso[VALUE_DIGESTS] as Map).let { root ->
+                if (root.keys.contains(UnicodeString(NAME_SPACES))) root[NAME_SPACES] as Map else root
+            }
+            val valueDigests: Map = digestsByNamespace[namespaceKey] as? Map
+                ?: throw ValidationException(
+                    "$ERROR_MESSAGE_INVALID_VALUE_DIGESTS (no digests for namespace in MSO)",
+                    ERROR_CODE_INVALID_VALUE_DIGESTS
+                )
 
             namespaceData.forEachIndexed { index, issuerSignedItem ->
                 if (issuerSignedItem !is ByteString || issuerSignedItem.tag?.value != 24L) {
