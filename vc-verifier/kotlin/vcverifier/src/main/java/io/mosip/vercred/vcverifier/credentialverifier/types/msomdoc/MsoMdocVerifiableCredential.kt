@@ -139,7 +139,15 @@ class MsoMdocVerifiableCredential : VerifiableCredential {
         validateMsoPayload(issuerAuth, isLatest)
         val mso = issuerAuth.extractMso()
         val docType = mso.get(UnicodeString(DOC_TYPE))
-
+        val encodedNameSpaceItems = try {
+            MsoMdocNameSpacesRawBytes.extract(decodedData)
+        } catch (exception: Exception) {
+            logger.severe("Failed to capture as-received nameSpaces item bytes: ${exception.message}")
+            throw ValidationException(
+                "Failed to capture as-received IssuerSignedItemBytes",
+                ERROR_CODE_INVALID_MSO
+            )
+        }
 
         return Triple(
             decodedCredential,
@@ -147,7 +155,8 @@ class MsoMdocVerifiableCredential : VerifiableCredential {
                 docType,
                 issuerSigned = MsoMdocCredentialData.IssuerSigned(
                     issuerAuth,
-                    issuerSignedNamespaces
+                    issuerSignedNamespaces,
+                    encodedNameSpaceItems,
                 ),
                 mso
             ),

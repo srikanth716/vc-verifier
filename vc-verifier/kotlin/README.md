@@ -949,7 +949,8 @@ For other unknown exceptions, error code will be `ERR_GENERIC`
 | duplicate digestID                    | ERR_INVALID_DIGEST_ID           |
 | nameSpaces record not tag-24          | ERR_INVALID_ISSUER_SIGNED_ITEM  |
 | COSE protected `alg` missing          | ERR_MISSING_ALG                 |
-| issue_date after validFrom            | ERR_INVALID_ISSUE_DATE          |
+| COSE protected `alg` not ES256 (-7)   | ERR_INVALID_ALG                 |
+| issue_date after validFrom / invalid date | ERR_INVALID_ISSUE_DATE      |
 
 For other unknown exceptions, error code will be `ERR_GENERIC`
 

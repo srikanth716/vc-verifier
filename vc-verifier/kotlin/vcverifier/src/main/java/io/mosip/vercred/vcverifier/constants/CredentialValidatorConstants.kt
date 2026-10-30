@@ -136,6 +136,8 @@ object CredentialValidatorConstants {
     const val ERROR_CODE_INVALID_ISSUE_DATE = "${ERROR_CODE_INVALID}ISSUE_DATE"
     const val ERROR_MESSAGE_INVALID_ISSUE_DATE =
         "issue_date must not be after validFrom"
+    const val ERROR_MESSAGE_INVALID_ISSUE_DATE_FORMAT =
+        "issue_date must be a valid full date (YYYY-MM-DD)"
 
     const val ERROR_CODE_INVALID_ISSUER_SIGNED_ITEM = "${ERROR_CODE_INVALID}ISSUER_SIGNED_ITEM"
     const val ERROR_MESSAGE_INVALID_ISSUER_SIGNED_ITEM =

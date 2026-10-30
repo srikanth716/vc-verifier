@@ -41,16 +41,16 @@ Detection order: C → B → A.
 
 Order of checks:
 
-1. COSE protected header must contain `alg`
+1. COSE protected header must contain `alg` and the value must be ES256 (`-7`); other algs → `ERR_INVALID_ALG`
 2. DS certificate from `x5chain`: within `notBefore` / `notAfter`
 3. For `docType` `org.iso.18013.5.1.mDL`:
    - KeyUsage includes `digitalSignature` and is critical
    - ExtendedKeyUsage includes `1.0.18013.5.1.2` and is critical
-4. MSO `signed` falls within DS certificate validity
-5. COSE signature verifies with DS public key
-6. Value digests: each received `nameSpaces` record is tag-24; hash **IssuerSignedItemBytes**; match MSO digests; reject duplicate `digestID`s; MSO digests without a received record are allowed (selective disclosure)
-7. Credential `docType` matches MSO `docType` (legacy shapes)
-8. For mDL: `issuing_country` matches DS `countryName` (mandatory when verifying mDL); `issuing_jurisdiction` matches DS `stateOrProvinceName` when both present; `issue_date` (if disclosed) is a full date and not after `validFrom`
+4. MSO `signed` falls within DS certificate validity **when `signed` is present**. For shapes B/C, `signed` is optional today (pending confirmation of issue #300 §2 #5); if absent, this check is skipped
+5. COSE signature verifies with DS public key. This does **not** establish IACA trust (`verifyCertificateChain` is currently a no-op / out of scope)
+6. Value digests: each received `nameSpaces` record is tag-24; hash the **exact on-the-wire** `IssuerSignedItemBytes` (full tag-24 wrapper bytes as received, not a re-encoded `DataItem`); match MSO digests; reject duplicate `digestID`s; MSO digests without a received record are allowed (selective disclosure)
+7. Credential `docType` matches MSO `docType` (legacy shapes). Shape C still uses only `documents[0]` (spike: multi-doc later)
+8. For mDL: `issuing_country` matches DS `countryName` (mandatory when verifying mDL); `issuing_jurisdiction` matches DS `stateOrProvinceName` when both present; `issue_date` (if disclosed) must be a valid full date and not after `validFrom`
 
 ## Out of scope
 

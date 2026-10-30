@@ -76,6 +76,15 @@ fun IssuerAuth.extractMso(): Map {
 }
 
 data class MsoMdocCredentialData(val docType: DataItem?, val issuerSigned: IssuerSigned, val mso: Map) {
-    data class IssuerSigned(val issuerAuth: IssuerAuth, val namespaces: IssuerSignedNamespaces)
+    /**
+     * @param encodedNameSpaceItems exact on-the-wire CBOR bytes for each nameSpaces array
+     * element (full tag-24 IssuerSignedItemBytes), keyed by namespace string and aligned
+     * with the decoded [namespaces] array order.
+     */
+    data class IssuerSigned(
+        val issuerAuth: IssuerAuth,
+        val namespaces: IssuerSignedNamespaces,
+        val encodedNameSpaceItems: kotlin.collections.Map<String, List<ByteArray>> = emptyMap(),
+    )
 }
 

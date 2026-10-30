@@ -22,7 +22,7 @@ import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_VALUE_DIGESTS
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_MISSING_ALG
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_DIGEST_ID
-import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_ISSUE_DATE
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_ISSUE_DATE_FORMAT
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_ISSUER_SIGNED_ITEM
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_MSO_ALG
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_MISSING_ALG
@@ -104,8 +104,8 @@ class MsoMdocVerifierTest {
     }
 
     @Test
-    fun `should throw exception when signature is invalid`() {
-        // Expired fixture cert fails DS validity before signature check.
+    fun `should throw ERR_INVALID_DS_CERT_VALIDITY when fixture DS certificate is expired`() {
+        // Public verify() hits DS validity before signature/digest checks on this expired fixture.
         val verificationException = assertThrows(ValidationException::class.java) {
             MsoMdocVerifier().verify(
                 "omdkb2NUeXBldW9yZy5pc28uMTgwMTMuNS4xLm1ETGxpc3N1ZXJTaWduZWSiamlzc3VlckF1dGiEQ6EBJqEYIVkBxDCCAcAwggFloAMCAQICFH6lICTsAhkMivItOT9v6JeZubwmMAoGCCqGSM49BAMCME4xCzAJBgNVBAYTAk1LMQ4wDAYDVQQIDAVNSy1LQTERMA8GA1UEBwwITW9ja0NpdHkxDTALBgNVBAoMBE1vY2sxDTALBgNVBAsMBE1vY2swHhcNMjQxMDIyMDcwMjUwWhcNMjUxMDIyMDcwMjUwWjBOMQswCQYDVQQGEwJNSzEOMAwGA1UECAwFTUstS0ExETAPBgNVBAcMCE1vY2tDaXR5MQ0wCwYDVQQKDARNb2NrMQ0wCwYDVQQLDARNb2NrMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEjtRcOXgIyR_xqGB-M6d0qkrjQWOBGGdlPgfIfb2xW0egZAVEz_55IXCofWaprRGxX7qQTlNAZyByniay2jzhR6MhMB8wHQYDVR0OBBYEFNqAHypQYcwWoeUfmMv4SbztomFvMAoGCCqGSM49BAMCA0kAMEYCIQDsgsz9wCa56ukpfyvq9371b5GhkSZb38G7xFofWgFtJwIhAKxACllIOtcleKETDFGa3araADjKd2isahQtXZwQmPr1WQJR2BhZAkymZ3ZlcnNpb25jMS4wb2RpZ2VzdEFsZ29yaXRobWdTSEEtMjU2Z2RvY1R5cGV1b3JnLmlzby4xODAxMy41LjEubURMbHZhbHVlRGlnZXN0c6Fxb3JnLmlzby4xODAxMy41LjGoAlggkeGezsuDJ_tDOu3Sc3wExf5jwtoGy8uqqRNp6tdAHzQGWCDhz5PP_T4u8YBXfDWb1_11Ov1OumpPaL10VoLXWL10mwNYIKiWCZi4gP_dX6r5_4QZISZzdi8_LO0BYcvnV3QPeac_AVggHp8Y6cV73O670tvfMiyCZoxGczcYyfOh43Q8ahKpxxcEWCC75BhZBjDE1I4S5NLZAsaUmBERMZM9rMgZPkAzl45VeABYIIlDF4uT1D3MLGPsLL-kVBP0SHyxAYcAVf9SLYLUJUUgB1ggFuI0cmV1WwSJGv5VxI5a7Dsm6fIqr2MeIDBmYjIlZ0oFWCA88kOo8KNGtCpl2XH5CXMcgoE6D_fag9xjmPoLUcpgpG1kZXZpY2VLZXlJbmZvoWlkZXZpY2VLZXmkAQIgASFYIOMdpjABg7S1sJBCgdC4D6V237Jk_oGhMl_LInX0CFnGIlggPdyNKVXrSZb4CYQmoK6lX7Zux0DIBcnhJ9-_a7ZlYtdsdmFsaWRpdHlJbmZvo2ZzaWduZWTAdDIwMjQtMTAtMjJUMDc6MDM6MTBaaXZhbGlkRnJvbcB0MjAyNC0xMC0yMlQwNzowMzoxMFpqdmFsaWRVbnRpbMB0MjAyNS0xMC0yMlQwNzowMzoxMFpYP3dUUFIy1nVZUdzgui9HxMGhQuEAOKD-F2XNL-PGG4lo3J51ri7h3j0ffmFsdrLi3OWPLO-yvh9twGM6BN8O02puYW1lU3BhY2VzoXFvcmcuaXNvLjE4MDEzLjUuMYjYGFhqpGhkaWdlc3RJRAJmcmFuZG9tUG2FLLW-amGqmgxhF71nQ-dxZWxlbWVudElkZW50aWZpZXJqaXNzdWVfZGF0ZWxlbGVtZW50VmFsdWV4GzIwMjQtMTAtMjJUMDc6MDM6MTAuNjM0OTE4WtgYWGukaGRpZ2VzdElEBmZyYW5kb21Q3JeFc5mOaF6IXLNh-GyXRnFlbGVtZW50SWRlbnRpZmllcmtleHBpcnlfZGF0ZWxlbGVtZW50VmFsdWV4GzIwMjUtMTAtMjJUMDc6MDM6MTAuNjM0OTE4WtgYWMGkaGRpZ2VzdElEA2ZyYW5kb21QIL6_sBEAsnZUVxjDD0BsyHFlbGVtZW50SWRlbnRpZmllcnJkcml2aW5nX3ByaXZpbGVnZXNsZWxlbWVudFZhbHVleGp7aXNzdWVfZGF0ZT0yMDI0LTEwLTIyVDA3OjAzOjEwLjYzNDkxOFosIHZlaGljbGVfY2F0ZWdvcnlfY29kZT1BLCBleHBpcnlfZGF0ZT0yMDI1LTEwLTIyVDA3OjAzOjEwLjYzNDkxOFp92BhYV6RoZGlnZXN0SUQBZnJhbmRvbVDjoYj_8RBZ62-85iZV371vcWVsZW1lbnRJZGVudGlmaWVyb2RvY3VtZW50X251bWJlcmxlbGVtZW50VmFsdWVkMTIzM9gYWFWkaGRpZ2VzdElEBGZyYW5kb21Qg7iWcNbZ-b9S2D3u3Av2YnFlbGVtZW50SWRlbnRpZmllcm9pc3N1aW5nX2NvdW50cnlsZWxlbWVudFZhbHVlYk1L2BhYWKRoZGlnZXN0SUQAZnJhbmRvbVAFg1zMFq1oLYxHiib0UCeYcWVsZW1lbnRJZGVudGlmaWVyamJpcnRoX2RhdGVsZWxlbWVudFZhbHVlajE5OTQtMTEtMDbYGFhUpGhkaWdlc3RJRAdmcmFuZG9tUElZm1bdU7M1GlcrQPJ_ctNxZWxlbWVudElkZW50aWZpZXJqZ2l2ZW5fbmFtZWxlbGVtZW50VmFsdWVmSm9zZXBo2BhYVaRoZGlnZXN0SUQFZnJhbmRvbVB_NHtdmXkWLPqVnSgypGGWcWVsZW1lbnRJZGVudGlmaWVya2ZhbWlseV9uYW1lbGVsZW1lbnRWYWx1ZWZBZ2F0aGE"
@@ -116,19 +116,38 @@ class MsoMdocVerifierTest {
     }
 
     @Test
-    fun `should throw exception when message digest is mismatched`() {
-        // Fixture DS certificate expired in 2025; cert validity is checked before digests.
-        val verificationException = assertThrows(ValidationException::class.java) {
-            MsoMdocVerifier().verify(
-                "omdkb2NUeXBldW9yZy5pc28uMTgwMTMuNS4xLm1ETGxpc3N1ZXJTaWduZWSiamlzc3VlckF1dGiEQ6EBJqEYIVkBxDCCAcAwggFloAMCAQICFH6lICTsAhkMivItOT9v6JeZubwmMAoGCCqGSM49BAMCME4xCzAJBgNVBAYTAk1LMQ4wDAYDVQQIDAVNSy1LQTERMA8GA1UEBwwITW9ja0NpdHkxDTALBgNVBAoMBE1vY2sxDTALBgNVBAsMBE1vY2swHhcNMjQxMDIyMDcwMjUwWhcNMjUxMDIyMDcwMjUwWjBOMQswCQYDVQQGEwJNSzEOMAwGA1UECAwFTUstS0ExETAPBgNVBAcMCE1vY2tDaXR5MQ0wCwYDVQQKDARNb2NrMQ0wCwYDVQQLDARNb2NrMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEjtRcOXgIyR_xqGB-M6d0qkrjQWOBGGdlPgfIfb2xW0egZAVEz_55IXCofWaprRGxX7qQTlNAZyByniay2jzhR6MhMB8wHQYDVR0OBBYEFNqAHypQYcwWoeUfmMv4SbztomFvMAoGCCqGSM49BAMCA0kAMEYCIQDsgsz9wCa56ukpfyvq9371b5GhkSZb38G7xFofWgFtJwIhAKxACllIOtcleKETDFGa3araADjKd2isahQtXZwQmPr1WQJR2BhZAkymZ3ZlcnNpb25jMS4wb2RpZ2VzdEFsZ29yaXRobWdTSEEtMjU2Z2RvY1R5cGV1b3JnLmlzby4xODAxMy41LjEubURMbHZhbHVlRGlnZXN0c6Fxb3JnLmlzby4xODAxMy41LjGoAlggkeGezsuDJ_tDOu3Sc3wExf5jwtoGy8uqqRNp6tdAHzQGWCDhz5PP_T4u8YBXfDWb1_11Ov1OumpPaL10VoLXWL10mwNYIKiWCZi4gP_dX6r5_4QZISZzdi8_LO0BYcvnV3QPeac_AVggHp8Y6cV73O670tvfMiyCZoxGczcYyfOh43Q8ahKpxxcEWCC75BhZBjDE1I4S5NLZAsaUmBERMZM9rMgZPkAzl45VeABYIIlDF4uT1D3MLGPsLL-kVBP0SHyxAYcAVf9SLYLUJUUgB1ggFuI0cmV1WwSJGv5VxI5a7Dsm6fIqr2MeIDBmYjIlZ0oFWCA88kOo8KNGtCpl2XH5CXMcgoE6D_fag9xjmPoLUcpgpG1kZXZpY2VLZXlJbmZvoWlkZXZpY2VLZXmkAQIgASFYIOMdpjABg7S1sJBCgdC4D6V237Jk_oGhMl_LInX0CFnGIlggPdyNKVXrSZb4CYQmoK6lX7Zux0DIBcnhJ9-_a7ZlYtdsdmFsaWRpdHlJbmZvo2ZzaWduZWTAdDIwMjQtMTAtMjJUMDc6MDM6MTBaaXZhbGlkRnJvbcB0MjAyNC0xMC0yMlQwNzowMzoxMFpqdmFsaWRVbnRpbMB0MjAyNS0xMC0yMlQwNzowMzoxMFpYQHdUUFIy1nVZUdYc4LovR8TBoULhADig_hdlzS_jxhuJaNyeda4u4d49H35hbHay4tzljyzvsr4fbcBjOgTfDtNqbmFtZVNwYWNlc6Fxb3JnLmlzby4xODAxMy41LjGI2BhYaqRoZGlnZXN0SUQCZnJhbmRvbVBthSy1vmphqpoMYRe9Z0PncWVsZW1lbnRJZGVudGlmaWVyamlzc3VlX2RhdGVsZWxlbWVudFZhbHVleBsyMDI0LTEwLTIyVDA3OjAzOjEwLjYzNDkxOFrYGFhrpGhkaWdlc3RJRAZmcmFuZG9tUNyXhXOZjmheiFyzYfhsl0ZxZWxlbWVudElkZW50aWZpZXJrZXhwaXJ5X2RhdGVsZWxlbWVudFZhbHVleBsyMDI1LTEwLTIyVDA3OjAzOjEwLjYzNDkxOFrYGFjBpGhkaWdlc3RJRANmcmFuZG9tUCC-v7ARALJ2VFcYww9AbMhxZWxlbWVudElkZW50aWZpZXJyZHJpdmluZ19wcml2aWxlZ2VzbGVsZW1lbnRWYWx1ZXhqe2lzc3VlX2RhdGU9MjAyNC0xMC0yMlQwNzowMzoxMC42MzQ5MThaLCB2ZWhpY2xlX2NhdGVnb3J5X2NvZGU9QSwgZXhwaXJ5X2RhdGU9MjAyNS0xMC0yMlQwNzowMzoxMC42MzQ5MThafdgYWFekaGRpZ2VzdElEAWZyYW5kb21Q46GI__EQWetvvOYmVd-9b3FlbGVtZW50SWRlbnRpZmllcm9kb2N1bWVudF9udW1iZXJsZWxlbWVudFZhbHVlZDEyMzPYGFhVpGhkaWdlc3RJRARmcmFuZG9tUIO4lnDW2fm_Utg97twL9mJxZWxlbWVudElkZW50aWZpZXJvaXNzdWluZ19jb3VudHJ5bGVsZW1lbnRWYWx1ZWJNS9gYWFikaGRpZ2VzdElEAGZyYW5kb21QBYNczBataC2MR4om9FAnmHFlbGVtZW50SWRlbnRpZmllcmpiaXJ0aF9kYXRlbGVsZW1lbnRWYWx1ZWoxOTk0LTExLTA22BhYVKRoZGlnZXN0SUQHZnJhbmRvbVBJWZtW3VOzNRpXK0Dyf3LTcWVsZW1lbnRJZGVudGlmaWVyamdpdmVuX25hbWVsZWxlbWVudFZhbHVlZkpvc2VwaNgYWFSkaGRpZ2VzdElEBWZyYW5kb21PfzR7XZl5LPqVnSgypGGWcWVsZW1lbnRJZGVudGlmaWVya2ZhbWlseV9uYW1lbGVsZW1lbnRWYWx1ZWZBZ2F0aGE"
+    fun `should throw ERR_INVALID_VALUE_DIGESTS when received digest does not match MSO`() {
+        val issuerSignedItem = CborMap().apply {
+            put(UnicodeString("digestID"), UnsignedInteger(1))
+            put(UnicodeString("random"), ByteString(ByteArray(16)))
+            put(UnicodeString("elementIdentifier"), UnicodeString("family_name"))
+            put(UnicodeString("elementValue"), UnicodeString("Doe"))
+        }
+        val itemBytes = ByteArrayOutputStream().also { CborEncoder(it).encode(issuerSignedItem) }.toByteArray()
+        val taggedItem = ByteString(itemBytes).apply { setTag(24) }
+        val encodedItem = ByteArrayOutputStream().also { CborEncoder(it).encode(taggedItem) }.toByteArray()
+        val namespace = UnicodeString("org.iso.18013.5.1")
+        val namespaces = CborMap().apply {
+            put(namespace, CborArray().apply { add(taggedItem) })
+        }
+        val encodedItems = mapOf("org.iso.18013.5.1" to listOf(encodedItem))
+        val mso = CborMap().apply {
+            put(UnicodeString("digestAlgorithm"), UnicodeString("SHA-256"))
+            put(
+                UnicodeString("valueDigests"),
+                CborMap().apply {
+                    put(
+                        namespace,
+                        CborMap().apply {
+                            put(UnsignedInteger(1), ByteString(ByteArray(32) { 0x11 }))
+                        }
+                    )
+                }
             )
         }
 
-        assertTrue(
-            verificationException.errorCode == ERROR_CODE_INVALID_DS_CERT_VALIDITY ||
-                verificationException.errorCode == ERROR_CODE_INVALID_VALUE_DIGESTS ||
-                verificationException.errorCode == ERROR_CODE_INVALID_DS_CERT_EKU
-        )
+        val validationException = invokeVerifyValueDigests(namespaces, encodedItems, mso)
+        assertEquals(ERROR_CODE_INVALID_VALUE_DIGESTS, validationException.errorCode)
     }
 
     @Test
@@ -196,16 +215,37 @@ class MsoMdocVerifierTest {
     }
 
     @Test
-    fun `should fail when issuing country in credential does not match DS certificate`() {
-        // Fixture may fail earlier on expired DS cert or missing EKU until certify fixtures land.
-        val exception = assertThrows(ValidationException::class.java) {
-            MsoMdocVerifier().verify("omdkb2NUeXBldW9yZy5pc28uMTgwMTMuNS4xLm1ETGxpc3N1ZXJTaWduZWSiamlzc3VlckF1dGiEQ6EBJqEYIVkBxDCCAcAwggFloAMCAQICFH6lICTsAhkMivItOT9v6JeZubwmMAoGCCqGSM49BAMCME4xCzAJBgNVBAYTAk1LMQ4wDAYDVQQIDAVNSy1LQTERMA8GA1UEBwwITW9ja0NpdHkxDTALBgNVBAoMBE1vY2sxDTALBgNVBAsMBE1vY2swHhcNMjQxMDIyMDcwMjUwWhcNMjUxMDIyMDcwMjUwWjBOMQswCQYDVQQGEwJNSzEOMAwGA1UECAwFTUstS0ExETAPBgNVBAcMCE1vY2tDaXR5MQ0wCwYDVQQKDARNb2NrMQ0wCwYDVQQLDARNb2NrMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEjtRcOXgIyR_xqGB-M6d0qkrjQWOBGGdlPgfIfb2xW0egZAVEz_55IXCofWaprRGxX7qQTlNAZyByniay2jzhR6MhMB8wHQYDVR0OBBYEFNqAHypQYcwWoeUfmMv4SbztomFvMAoGCCqGSM49BAMCA0kAMEYCIQDsgsz9wCa56ukpfyvq9371b5GhkSZb38G7xFofWgFtJwIhAKxACllIOtcleKETDFGa3araADjKd2isahQtXZwQmPr1WQJR2BhZAkymZ3ZlcnNpb25jMS4wb2RpZ2VzdEFsZ29yaXRobWdTSEEtMjU2Z2RvY1R5cGV1b3JnLmlzby4xODAxMy41LjEubURMbHZhbHVlRGlnZXN0c6Fxb3JnLmlzby4xODAxMy41LjGoAlggTphoJamBvWVZrImId1Go0_6uOmS0SqQ-pAmTgB1aprMGWCAqCpe8J0XKZg58D8tGRXHCv7aulR4dtdAeJn6-zJUXXwNYILgovI_Lif8IlcgNJO-j9sxSszpf58djrhHCl8HvfTfhAVggHp8Y6cV73O670tvfMiyCZoxGczcYyfOh43Q8ahKpxxcEWCC91v4q7bZP2AdLGlDKSWK1BASiC148m-aS0hkei24pwgBYIIlDF4uT1D3MLGPsLL-kVBP0SHyxAYcAVf9SLYLUJUUgB1ggFuI0cmV1WwSJGv5VxI5a7Dsm6fIqr2MeIDBmYjIlZ0oFWCA88kOo8KNGtCpl2XH5CXMcgoE6D_fag9xjmPoLUcpgpG1kZXZpY2VLZXlJbmZvoWlkZXZpY2VLZXmkAQIgASFYIOMdpjABg7S1sJBCgdC4D6V237Jk_oGhMl_LInX0CFnGIlggPdyNKVXrSZb4CYQmoK6lX7Zux0DIBcnhJ9-_a7ZlYtdsdmFsaWRpdHlJbmZvo2ZzaWduZWTAdDIwMjQtMTAtMjJUMDc6MzU6MTdaaXZhbGlkRnJvbcB0MjAyNC0xMC0yMlQwNzozNToxN1pqdmFsaWRVbnRpbMB0MjAyNS0xMC0yMlQwNzozNToxN1pYQBIvMRaxxd5F8xUydwsAmne6IHte4eGDtsiiSws0C48nZkm4Me-iV_uUPAlwXoEe5u_TAUV0dhY8AXZIVCS8v5NqbmFtZVNwYWNlc6Fxb3JnLmlzby4xODAxMy41LjGI2BhYaqRoZGlnZXN0SUQCZnJhbmRvbVBthSy1vmphqpoMYRe9Z0PncWVsZW1lbnRJZGVudGlmaWVyamlzc3VlX2RhdGVsZWxlbWVudFZhbHVleBsyMDI0LTEwLTIyVDA3OjM1OjE3LjQwODIxMFrYGFhrpGhkaWdlc3RJRAZmcmFuZG9tUNyXhXOZjmheiFyzYfhsl0ZxZWxlbWVudElkZW50aWZpZXJrZXhwaXJ5X2RhdGVsZWxlbWVudFZhbHVleBsyMDI1LTEwLTIyVDA3OjM1OjE3LjQwODIxMFrYGFjBpGhkaWdlc3RJRANmcmFuZG9tUCC-v7ARALJ2VFcYww9AbMhxZWxlbWVudElkZW50aWZpZXJyZHJpdmluZ19wcml2aWxlZ2VzbGVsZW1lbnRWYWx1ZXhqe2lzc3VlX2RhdGU9MjAyNC0xMC0yMlQwNzozNToxNy40MDgyMTBaLCB2ZWhpY2xlX2NhdGVnb3J5X2NvZGU9QSwgZXhwaXJ5X2RhdGU9MjAyNS0xMC0yMlQwNzozNToxNy40MDgyMTBafdgYWFekaGRpZ2VzdElEAWZyYW5kb21Q46GI__EQWetvvOYmVd-9b3FlbGVtZW50SWRlbnRpZmllcm9kb2N1bWVudF9udW1iZXJsZWxlbWVudFZhbHVlZDEyMzPYGFhVpGhkaWdlc3RJRARmcmFuZG9tUIO4lnDW2fm_Utg97twL9mJxZWxlbWVudElkZW50aWZpZXJvaXNzdWluZ19jb3VudHJ5bGVsZW1lbnRWYWx1ZWJTQdgYWFikaGRpZ2VzdElEAGZyYW5kb21QBYNczBataC2MR4om9FAnmHFlbGVtZW50SWRlbnRpZmllcmpiaXJ0aF9kYXRlbGVsZW1lbnRWYWx1ZWoxOTk0LTExLTA22BhYVKRoZGlnZXN0SUQHZnJhbmRvbVBJWZtW3VOzNRpXK0Dyf3LTcWVsZW1lbnRJZGVudGlmaWVyamdpdmVuX25hbWVsZWxlbWVudFZhbHVlZkpvc2VwaNgYWFWkaGRpZ2VzdElEBWZyYW5kb21QfzR7XZl5Fiz6lZ0oMqRhlnFlbGVtZW50SWRlbnRpZmllcmtmYW1pbHlfbmFtZWxlbGVtZW50VmFsdWVmQWdhdGhh")
+    fun `should throw ERR_INVALID_ISSUING_COUNTRY when claim country mismatches DS C`() {
+        val issuerSignedItem = CborMap().apply {
+            put(UnicodeString("digestID"), UnsignedInteger(1))
+            put(UnicodeString("random"), ByteString(ByteArray(8)))
+            put(UnicodeString("elementIdentifier"), UnicodeString("issuing_country"))
+            put(UnicodeString("elementValue"), UnicodeString("SA"))
         }
-        assertTrue(
-            exception.errorCode == ERROR_CODE_INVALID_ISSUING_COUNTRY ||
-                exception.errorCode == ERROR_CODE_INVALID_DS_CERT_VALIDITY ||
-                exception.errorCode == ERROR_CODE_INVALID_DS_CERT_EKU
+        val itemBytes = ByteArrayOutputStream().also { CborEncoder(it).encode(issuerSignedItem) }.toByteArray()
+        val namespaces = CborMap().apply {
+            put(
+                UnicodeString("org.iso.18013.5.1"),
+                CborArray().apply { add(ByteString(itemBytes)) }
+            )
+        }
+        val certificate = io.mockk.mockk<java.security.cert.X509Certificate>()
+        every { certificate.subjectX500Principal } returns javax.security.auth.x500.X500Principal(
+            "CN=Doe\\, Esq,C=IN"
         )
+
+        val verifier = MsoMdocVerifier()
+        val method = verifier.javaClass.getDeclaredMethod(
+            "verifyCountryName",
+            java.security.cert.X509Certificate::class.java,
+            CborMap::class.java
+        )
+        method.isAccessible = true
+        val invocationException = assertThrows(InvocationTargetException::class.java) {
+            method.invoke(verifier, certificate, namespaces)
+        }
+        val validationException = invocationException.targetException as ValidationException
+        assertEquals(ERROR_CODE_INVALID_ISSUING_COUNTRY, validationException.errorCode)
     }
 
     @Test
@@ -361,33 +401,28 @@ class MsoMdocVerifierTest {
             method.invoke(verifier, CborMap(), namespaces)
         }
         val validationException = invocationException.targetException as ValidationException
-        assertEquals(ERROR_MESSAGE_INVALID_ISSUE_DATE, validationException.errorMessage)
+        assertEquals(ERROR_MESSAGE_INVALID_ISSUE_DATE_FORMAT, validationException.errorMessage)
         assertEquals(ERROR_CODE_INVALID_ISSUE_DATE, validationException.errorCode)
     }
 
     @Test
     fun `should throw when nameSpaces record is not tag-24`() {
         val namespace = UnicodeString("org.iso.18013.5.1")
+        val plainItem = ByteString(byteArrayOf(1, 2, 3))
         val namespaces = CborMap().apply {
-            put(namespace, CborArray().apply { add(ByteString(byteArrayOf(1, 2, 3))) })
+            put(namespace, CborArray().apply { add(plainItem) })
         }
+        val encodedItems = mapOf(
+            "org.iso.18013.5.1" to listOf(
+                ByteArrayOutputStream().also { CborEncoder(it).encode(plainItem) }.toByteArray()
+            )
+        )
         val mso = CborMap().apply {
             put(UnicodeString("digestAlgorithm"), UnicodeString("SHA-256"))
             put(UnicodeString("valueDigests"), CborMap().apply { put(namespace, CborMap()) })
         }
 
-        val verifier = MsoMdocVerifier()
-        val method = verifier.javaClass.getDeclaredMethod(
-            "verifyValueDigests",
-            CborMap::class.java,
-            CborMap::class.java
-        )
-        method.isAccessible = true
-
-        val invocationException = assertThrows(InvocationTargetException::class.java) {
-            method.invoke(verifier, namespaces, mso)
-        }
-        val validationException = invocationException.targetException as ValidationException
+        val validationException = invokeVerifyValueDigests(namespaces, encodedItems, mso)
         assertEquals(ERROR_MESSAGE_INVALID_ISSUER_SIGNED_ITEM, validationException.errorMessage)
         assertEquals(ERROR_CODE_INVALID_ISSUER_SIGNED_ITEM, validationException.errorCode)
     }
@@ -402,6 +437,7 @@ class MsoMdocVerifierTest {
         }
         val itemBytes = ByteArrayOutputStream().also { CborEncoder(it).encode(issuerSignedItem) }.toByteArray()
         val taggedItem = ByteString(itemBytes).apply { setTag(24) }
+        val encodedItem = ByteArrayOutputStream().also { CborEncoder(it).encode(taggedItem) }.toByteArray()
 
         val namespace = UnicodeString("org.iso.18013.5.1")
         val namespaces = CborMap().apply {
@@ -410,24 +446,96 @@ class MsoMdocVerifierTest {
                 add(taggedItem)
             })
         }
+        val encodedItems = mapOf(
+            "org.iso.18013.5.1" to listOf(encodedItem, encodedItem)
+        )
         val mso = CborMap().apply {
             put(UnicodeString("digestAlgorithm"), UnicodeString("SHA-256"))
             put(UnicodeString("valueDigests"), CborMap().apply { put(namespace, CborMap()) })
+        }
+
+        val validationException = invokeVerifyValueDigests(namespaces, encodedItems, mso)
+        assertEquals(ERROR_MESSAGE_INVALID_DIGEST_ID, validationException.errorMessage)
+        assertEquals(ERROR_CODE_INVALID_DIGEST_ID, validationException.errorCode)
+    }
+
+    @Test
+    fun `should hash as-received tag-24 wrapper bytes not a re-encoded DataItem`() {
+        // Manually craft IssuerSignedItemBytes with a non-canonical bstr length header
+        // (2-byte length form) that CborEncoder would not emit for this size.
+        val innerMap = CborMap().apply {
+            put(UnicodeString("digestID"), UnsignedInteger(7))
+            put(UnicodeString("random"), ByteString(ByteArray(4) { 1 }))
+            put(UnicodeString("elementIdentifier"), UnicodeString("family_name"))
+            put(UnicodeString("elementValue"), UnicodeString("Doe"))
+        }
+        val innerBytes = ByteArrayOutputStream().also { CborEncoder(it).encode(innerMap) }.toByteArray()
+        require(innerBytes.size < 256) { "test fixture assumes single-byte length is enough" }
+
+        // d818 59 00 NN <inner...>  — tag 24 + bstr with 16-bit length (non-canonical for small NN)
+        val nonCanonicalTagged = ByteArray(3 + 2 + innerBytes.size)
+        nonCanonicalTagged[0] = 0xd8.toByte()
+        nonCanonicalTagged[1] = 0x18
+        nonCanonicalTagged[2] = 0x59 // bstr, 2-byte length
+        nonCanonicalTagged[3] = 0x00
+        nonCanonicalTagged[4] = innerBytes.size.toByte()
+        System.arraycopy(innerBytes, 0, nonCanonicalTagged, 5, innerBytes.size)
+
+        val decodedTagged = co.nstant.`in`.cbor.CborDecoder(
+            java.io.ByteArrayInputStream(nonCanonicalTagged)
+        ).decode()[0] as ByteString
+        val canonicalReencoded = ByteArrayOutputStream().also { CborEncoder(it).encode(decodedTagged) }.toByteArray()
+        assertFalse(
+            canonicalReencoded.contentEquals(nonCanonicalTagged),
+            "precondition: re-encode must differ from non-canonical as-received bytes"
+        )
+
+        val expectedDigest = java.security.MessageDigest.getInstance("SHA-256").digest(nonCanonicalTagged)
+        val namespace = UnicodeString("org.iso.18013.5.1")
+        val namespaces = CborMap().apply {
+            put(namespace, CborArray().apply { add(decodedTagged) })
+        }
+        val encodedItems = mapOf("org.iso.18013.5.1" to listOf(nonCanonicalTagged))
+        val mso = CborMap().apply {
+            put(UnicodeString("digestAlgorithm"), UnicodeString("SHA-256"))
+            put(
+                UnicodeString("valueDigests"),
+                CborMap().apply {
+                    put(
+                        namespace,
+                        CborMap().apply { put(UnsignedInteger(7), ByteString(expectedDigest)) }
+                    )
+                }
+            )
         }
 
         val verifier = MsoMdocVerifier()
         val method = verifier.javaClass.getDeclaredMethod(
             "verifyValueDigests",
             CborMap::class.java,
+            Map::class.java,
             CborMap::class.java
         )
         method.isAccessible = true
+        assertDoesNotThrow { method.invoke(verifier, namespaces, encodedItems, mso) }
+    }
 
+    private fun invokeVerifyValueDigests(
+        namespaces: CborMap,
+        encodedItems: Map<String, List<ByteArray>>,
+        mso: CborMap,
+    ): ValidationException {
+        val verifier = MsoMdocVerifier()
+        val method = verifier.javaClass.getDeclaredMethod(
+            "verifyValueDigests",
+            CborMap::class.java,
+            Map::class.java,
+            CborMap::class.java
+        )
+        method.isAccessible = true
         val invocationException = assertThrows(InvocationTargetException::class.java) {
-            method.invoke(verifier, namespaces, mso)
+            method.invoke(verifier, namespaces, encodedItems, mso)
         }
-        val validationException = invocationException.targetException as ValidationException
-        assertEquals(ERROR_MESSAGE_INVALID_DIGEST_ID, validationException.errorMessage)
-        assertEquals(ERROR_CODE_INVALID_DIGEST_ID, validationException.errorCode)
+        return invocationException.targetException as ValidationException
     }
 }

@@ -25,6 +25,7 @@ import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_DS_CERT_KEY_USAGE
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_DS_CERT_VALIDITY
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_ISSUE_DATE
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_ISSUE_DATE_FORMAT
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_ISSUER_SIGNED_ITEM
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_ISSUING_COUNTRY
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_ISSUING_JURISDICTION
@@ -98,7 +99,11 @@ internal class MsoMdocVerifier {
             verifyProtectedHeaderAlg(issuerAuth)
             val dsCertificate = verifyDsCertificate(issuerAuth, mobileSecurityObject)
             verificationOfCoseSignature(issuerAuth, dsCertificate)
-            verifyValueDigests(issuerSigned.namespaces, mobileSecurityObject)
+            verifyValueDigests(
+                issuerSigned.namespaces,
+                issuerSigned.encodedNameSpaceItems,
+                mobileSecurityObject,
+            )
             verifyDocType(decodedCredential, mobileSecurityObject, isLatest)
             verifyMdlDataElements(mobileSecurityObject, issuerSigned.namespaces, dsCertificate)
             return true
@@ -142,7 +147,7 @@ internal class MsoMdocVerifier {
             (protectedHeader[UnsignedInteger(COSE_ALG_HEADER_LABEL)]
                 as? co.nstant.`in`.cbor.model.Number)
                 ?.value
-        if (protectedAlg != java.math.BigInteger.valueOf(COSE_ALG_ES256)) {
+        if (protectedAlg == null || protectedAlg != java.math.BigInteger.valueOf(COSE_ALG_ES256)) {
             throw ValidationException(ERROR_MESSAGE_INVALID_MSO_ALG, ERROR_CODE_INVALID_ALG)
         }
     }
@@ -278,7 +283,7 @@ internal class MsoMdocVerifier {
             ?: return
         if (!DateUtils.isIsoFullDate(issueDate)) {
             throw ValidationException(
-                ERROR_MESSAGE_INVALID_ISSUE_DATE,
+                ERROR_MESSAGE_INVALID_ISSUE_DATE_FORMAT,
                 ERROR_CODE_INVALID_ISSUE_DATE
             )
         }
@@ -288,7 +293,7 @@ internal class MsoMdocVerifier {
         } catch (_: org.threeten.bp.format.DateTimeParseException) {
             // Regex-only shape check can still admit impossible calendar dates (e.g. 2024-13-45).
             throw ValidationException(
-                ERROR_MESSAGE_INVALID_ISSUE_DATE,
+                ERROR_MESSAGE_INVALID_ISSUE_DATE_FORMAT,
                 ERROR_CODE_INVALID_ISSUE_DATE
             )
         }
@@ -307,12 +312,67 @@ internal class MsoMdocVerifier {
         }
     }
 
+    /**
+     * Extract a DN attribute from an RFC 2253 name. Escaped commas/backslashes in values are
+     * respected (Android has no javax.naming.ldap.LdapName on the runtime classpath).
+     * When multiple RDNs share the type, the most-specific (rightmost in RFC 2253) wins.
+     */
     private fun extractDnAttribute(principal: X500Principal, attribute: String): String? {
-        val rdns = principal.name.split(",")
-        val prefix = "$attribute="
-        return rdns.map { it.trim() }
-            .firstOrNull { it.startsWith(prefix) }
-            ?.substring(prefix.length)
+        return try {
+            splitRfc2253Rdns(principal.name)
+                .asReversed()
+                .map { it.trim() }
+                .firstOrNull { rdn ->
+                    val eq = rdn.indexOf('=')
+                    eq > 0 && rdn.substring(0, eq).equals(attribute, ignoreCase = true)
+                }
+                ?.substringAfter('=')
+                ?.let { unescapeRfc2253Value(it) }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun splitRfc2253Rdns(dn: String): List<String> {
+        val rdns = mutableListOf<String>()
+        val current = StringBuilder()
+        var i = 0
+        while (i < dn.length) {
+            val c = dn[i]
+            if (c == '\\' && i + 1 < dn.length) {
+                current.append(c).append(dn[i + 1])
+                i += 2
+                continue
+            }
+            if (c == ',') {
+                rdns.add(current.toString())
+                current.clear()
+                i++
+                continue
+            }
+            current.append(c)
+            i++
+        }
+        if (current.isNotEmpty()) {
+            rdns.add(current.toString())
+        }
+        return rdns
+    }
+
+    private fun unescapeRfc2253Value(value: String): String {
+        val out = StringBuilder(value.length)
+        var i = 0
+        while (i < value.length) {
+            val c = value[i]
+            if (c == '\\' && i + 1 < value.length) {
+                out.append(value[i + 1])
+                i += 2
+                continue
+            }
+            out.append(c)
+            i++
+        }
+        return out.toString()
     }
 
     private fun verifyDocType(decodedCredential: Map, mso: Map, isLatest: Boolean): Boolean {
@@ -371,22 +431,38 @@ internal class MsoMdocVerifier {
     }
 
 
-    private fun verifyValueDigests(issuerSignedNamespaces: Map, mso: Map): Boolean {
+    private fun verifyValueDigests(
+        issuerSignedNamespaces: Map,
+        encodedNameSpaceItems: kotlin.collections.Map<String, List<ByteArray>>,
+        mso: Map,
+    ): Boolean {
         val digestAlgorithm = mso[DIGEST_ALGORITHM].toString()
 
-        issuerSignedNamespaces.keys.forEach { namespace ->
+        issuerSignedNamespaces.keys.forEach { namespaceKey ->
+            val namespace = (namespaceKey as? UnicodeString)?.string
+                ?: throw ValidationException(
+                    ERROR_MESSAGE_INVALID_VALUE_DIGESTS,
+                    ERROR_CODE_INVALID_VALUE_DIGESTS
+                )
             val namespaceData: List<DataItem> =
-                ((issuerSignedNamespaces[namespace]) as Array).dataItems
+                ((issuerSignedNamespaces[namespaceKey]) as Array).dataItems
+            val encodedItems = encodedNameSpaceItems[namespace]
+            if (encodedItems == null || encodedItems.size != namespaceData.size) {
+                throw ValidationException(
+                    "$ERROR_MESSAGE_INVALID_VALUE_DIGESTS (as-received nameSpaces bytes unavailable)",
+                    ERROR_CODE_INVALID_VALUE_DIGESTS
+                )
+            }
             val calculatedDigests = mutableMapOf<Number, ByteArray>()
 
             val valueDigests: Map =
                 if ((mso[VALUE_DIGESTS] as Map).keys.contains(UnicodeString(NAME_SPACES))) {
-                    ((mso[VALUE_DIGESTS][NAME_SPACES] as Map)[namespace]) as Map
+                    ((mso[VALUE_DIGESTS][NAME_SPACES] as Map)[namespaceKey]) as Map
                 } else {
-                    ((mso[VALUE_DIGESTS] as Map)[namespace]) as Map
+                    ((mso[VALUE_DIGESTS] as Map)[namespaceKey]) as Map
                 }
 
-            namespaceData.forEach { issuerSignedItem ->
+            namespaceData.forEachIndexed { index, issuerSignedItem ->
                 if (issuerSignedItem !is ByteString || issuerSignedItem.tag?.value != 24L) {
                     throw ValidationException(
                         ERROR_MESSAGE_INVALID_ISSUER_SIGNED_ITEM,
@@ -394,9 +470,8 @@ internal class MsoMdocVerifier {
                     )
                 }
 
-                // Hash IssuerSignedItemBytes: the tag-24 byte string as CBOR-encoded.
-                // For canonical encodings this matches the on-the-wire bytes.
-                val issuerSignedItemBytes = CborDataItemUtils.toByteArray(issuerSignedItem)
+                // Hash IssuerSignedItemBytes exactly as received (full tag-24 wrapper bytes).
+                val issuerSignedItemBytes = encodedItems[index]
                 val digest = MessageDigest.getInstance(digestAlgorithm).digest(issuerSignedItemBytes)
                 val decodedIssuerSignedItem =
                     CborDecoder(ByteArrayInputStream(issuerSignedItem.bytes)).decode()[0]
