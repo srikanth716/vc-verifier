@@ -13,7 +13,6 @@ import io.mosip.vercred.vcverifier.utils.Util.verifyJwt
 import java.security.PublicKey
 import java.security.cert.CertificateExpiredException
 import java.security.cert.CertificateNotYetValidException
-import java.time.Clock
 import java.util.Date
 
 private const val DID_SCHEME = "did:"
@@ -35,7 +34,9 @@ private const val HTTPS_SCHEME = "https://"
  */
 private val PERMITTED_ISSUER_DID_METHODS = setOf(DidMethod.WEB, DidMethod.KEY, DidMethod.JWK)
 
-class SdJwtVerifier(private val clock: Clock = Clock.systemUTC()) {
+class SdJwtVerifier(
+    private val currentTimeMillis: () -> Long = System::currentTimeMillis
+) {
 
     fun verify(credential: String): Boolean {
         val parts = credential.split("~")
@@ -109,7 +110,7 @@ class SdJwtVerifier(private val clock: Clock = Clock.systemUTC()) {
         val certificateBytes = Base64Decoder().decodeFromBase64(certBase64)
         val x509Certificate = Util.toX509Certificate(certificateBytes)
         try {
-            x509Certificate.checkValidity(Date.from(clock.instant()))
+            x509Certificate.checkValidity(Date(currentTimeMillis()))
         } catch (_: CertificateExpiredException) {
             throw SignatureVerificationException(
                 ERROR_MESSAGE_INVALID_X5C_CERT_VALIDITY,

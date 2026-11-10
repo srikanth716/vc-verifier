@@ -17,16 +17,14 @@ import org.junit.jupiter.api.Test
 import org.springframework.util.ResourceUtils
 import java.nio.file.Files
 import java.security.PublicKey
-import java.time.Clock
 import java.time.Instant
-import java.time.ZoneOffset
 import java.util.Base64
 
 class SdJwtVerifierTest{
 
     // Pinned inside the validity window of every x5c fixture used here (and after the expired
     // fixture's notAfter), so certificate validity checks do not depend on the wall clock.
-    private val fixedClock = Clock.fixed(Instant.parse("2026-11-01T00:00:00Z"), ZoneOffset.UTC)
+    private val fixedClock: () -> Long = { Instant.parse("2026-11-01T00:00:00Z").toEpochMilli() }
 
     @Test
     fun `should verify sd-jwt successfully`() {
