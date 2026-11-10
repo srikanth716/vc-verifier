@@ -11,8 +11,7 @@ import io.mosip.vercred.vcverifier.utils.Base64Decoder
 import io.mosip.vercred.vcverifier.utils.Util
 import io.mosip.vercred.vcverifier.utils.Util.verifyJwt
 import java.security.PublicKey
-import java.security.cert.CertificateExpiredException
-import java.security.cert.CertificateNotYetValidException
+import java.security.cert.CertificateException
 import java.util.Date
 
 private const val DID_SCHEME = "did:"
@@ -111,12 +110,9 @@ class SdJwtVerifier(
         val x509Certificate = Util.toX509Certificate(certificateBytes)
         try {
             x509Certificate.checkValidity(Date(currentTimeMillis()))
-        } catch (_: CertificateExpiredException) {
-            throw SignatureVerificationException(
-                ERROR_MESSAGE_INVALID_X5C_CERT_VALIDITY,
-                ERROR_CODE_INVALID_X5C_CERT_VALIDITY
-            )
-        } catch (_: CertificateNotYetValidException) {
+        } catch (_: CertificateException) {
+            // checkValidity(Date) throws only CertificateExpiredException and
+            // CertificateNotYetValidException, so this covers exactly those two cases.
             throw SignatureVerificationException(
                 ERROR_MESSAGE_INVALID_X5C_CERT_VALIDITY,
                 ERROR_CODE_INVALID_X5C_CERT_VALIDITY
