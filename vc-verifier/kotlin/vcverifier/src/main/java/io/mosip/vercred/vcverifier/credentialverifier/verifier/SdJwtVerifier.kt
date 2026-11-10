@@ -1,6 +1,7 @@
 package io.mosip.vercred.vcverifier.credentialverifier.verifier
 
 import com.nimbusds.jose.JWSObject
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_X5C_CERT_VALIDITY
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_X5C_CERT_VALIDITY
 import io.mosip.vercred.vcverifier.constants.DidMethod
 import io.mosip.vercred.vcverifier.exception.SignatureVerificationException
@@ -12,6 +13,8 @@ import io.mosip.vercred.vcverifier.utils.Util.verifyJwt
 import java.security.PublicKey
 import java.security.cert.CertificateExpiredException
 import java.security.cert.CertificateNotYetValidException
+import java.time.Clock
+import java.util.Date
 
 private const val DID_SCHEME = "did:"
 private const val HTTPS_SCHEME = "https://"
@@ -32,7 +35,7 @@ private const val HTTPS_SCHEME = "https://"
  */
 private val PERMITTED_ISSUER_DID_METHODS = setOf(DidMethod.WEB, DidMethod.KEY, DidMethod.JWK)
 
-class SdJwtVerifier {
+class SdJwtVerifier(private val clock: Clock = Clock.systemUTC()) {
 
     fun verify(credential: String): Boolean {
         val parts = credential.split("~")
@@ -106,11 +109,17 @@ class SdJwtVerifier {
         val certificateBytes = Base64Decoder().decodeFromBase64(certBase64)
         val x509Certificate = Util.toX509Certificate(certificateBytes)
         try {
-            x509Certificate.checkValidity()
+            x509Certificate.checkValidity(Date.from(clock.instant()))
         } catch (_: CertificateExpiredException) {
-            throw SignatureVerificationException(ERROR_MESSAGE_INVALID_X5C_CERT_VALIDITY)
+            throw SignatureVerificationException(
+                ERROR_MESSAGE_INVALID_X5C_CERT_VALIDITY,
+                ERROR_CODE_INVALID_X5C_CERT_VALIDITY
+            )
         } catch (_: CertificateNotYetValidException) {
-            throw SignatureVerificationException(ERROR_MESSAGE_INVALID_X5C_CERT_VALIDITY)
+            throw SignatureVerificationException(
+                ERROR_MESSAGE_INVALID_X5C_CERT_VALIDITY,
+                ERROR_CODE_INVALID_X5C_CERT_VALIDITY
+            )
         }
         return x509Certificate.publicKey
     }

@@ -10,6 +10,9 @@ import io.mosip.vercred.vcverifier.constants.CredentialFormat.VC_SD_JWT
 import io.mosip.vercred.vcverifier.constants.CredentialFormat.JWT_VC_JSON
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.CONTEXT
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_GENERIC
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_X5C_CERT_VALIDITY
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_X5C_CERT_VALIDITY
+import io.mosip.vercred.vcverifier.constants.CredentialVerifierConstants.EXCEPTION_DURING_VERIFICATION
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_MISSING
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_MISSING_KB_JWT
 import io.mosip.vercred.vcverifier.constants.CredentialVerifierConstants.ERROR_CODE_VERIFICATION_FAILED
@@ -187,6 +190,22 @@ class CredentialsVerifierTest {
         assertEquals("", verificationResult.verificationMessage)
         assertTrue(verificationResult.verificationStatus)
         assertEquals("", verificationResult.verificationErrorCode)
+    }
+
+    @Test
+    @Timeout(value = 10, unit = TimeUnit.SECONDS)
+    fun `should return x5c cert validity error code when sd-jwt x5c certificate is expired`() {
+        // sdJwtWithExpiredX5c.txt: x5c notAfter is 2025-10-30, so it is expired against the wall clock.
+        val vc = readClasspathFile("sd-jwt_vc/sdJwtWithExpiredX5c.txt").trim()
+
+        val verificationResult = CredentialsVerifier().verify(vc, VC_SD_JWT, validateKeyBindingJwt = false)
+
+        assertFalse(verificationResult.verificationStatus)
+        assertEquals(
+            "$EXCEPTION_DURING_VERIFICATION$ERROR_MESSAGE_INVALID_X5C_CERT_VALIDITY",
+            verificationResult.verificationMessage
+        )
+        assertEquals(ERROR_CODE_INVALID_X5C_CERT_VALIDITY, verificationResult.verificationErrorCode)
     }
 
     @Test

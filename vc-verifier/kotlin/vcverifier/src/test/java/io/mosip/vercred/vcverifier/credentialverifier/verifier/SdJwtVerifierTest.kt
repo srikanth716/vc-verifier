@@ -1,5 +1,6 @@
 package io.mosip.vercred.vcverifier.credentialverifier.verifier
 
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_X5C_CERT_VALIDITY
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_X5C_CERT_VALIDITY
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.MsoMdocVerifiableCredential
 import io.mockk.*
@@ -16,16 +17,23 @@ import org.junit.jupiter.api.Test
 import org.springframework.util.ResourceUtils
 import java.nio.file.Files
 import java.security.PublicKey
+import java.time.Clock
+import java.time.Instant
+import java.time.ZoneOffset
 import java.util.Base64
 
 class SdJwtVerifierTest{
+
+    // Pinned inside the validity window of every x5c fixture used here (and after the expired
+    // fixture's notAfter), so certificate validity checks do not depend on the wall clock.
+    private val fixedClock = Clock.fixed(Instant.parse("2026-11-01T00:00:00Z"), ZoneOffset.UTC)
 
     @Test
     fun `should verify sd-jwt successfully`() {
         val file = ResourceUtils.getFile(ResourceUtils.CLASSPATH_URL_PREFIX + "sd-jwt_vc/sdJwt.txt")
         val vc = String(Files.readAllBytes(file.toPath()))
 
-        assertTrue(SdJwtVerifier().verify(vc))
+        assertTrue(SdJwtVerifier(fixedClock).verify(vc))
     }
 
     @Test
@@ -37,10 +45,11 @@ class SdJwtVerifierTest{
         val vc = String(Files.readAllBytes(file.toPath())).trim()
 
         val error = assertThrows(SignatureVerificationException::class.java) {
-            SdJwtVerifier().verify(vc)
+            SdJwtVerifier(fixedClock).verify(vc)
         }
 
         assertEquals(ERROR_MESSAGE_INVALID_X5C_CERT_VALIDITY, error.message)
+        assertEquals(ERROR_CODE_INVALID_X5C_CERT_VALIDITY, error.errorCode)
     }
 
     @Test
@@ -48,7 +57,7 @@ class SdJwtVerifierTest{
         val file = ResourceUtils.getFile(ResourceUtils.CLASSPATH_URL_PREFIX + "sd-jwt_vc/sdJwtVcWithX5cSanMatchingIss.txt")
         val vc = String(Files.readAllBytes(file.toPath())).trim()
 
-        assertTrue(SdJwtVerifier().verify(vc))
+        assertTrue(SdJwtVerifier(fixedClock).verify(vc))
     }
 
     @Test
@@ -65,7 +74,7 @@ class SdJwtVerifierTest{
         val file = ResourceUtils.getFile(ResourceUtils.CLASSPATH_URL_PREFIX + "sd-jwt_vc/invalidSdJwt.txt")
         val vc = String(Files.readAllBytes(file.toPath()))
 
-        assertFalse( SdJwtVerifier().verify(vc))
+        assertFalse( SdJwtVerifier(fixedClock).verify(vc))
     }
 
     @Test

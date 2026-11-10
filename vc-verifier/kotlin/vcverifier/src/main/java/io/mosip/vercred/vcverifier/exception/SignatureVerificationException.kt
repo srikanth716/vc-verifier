@@ -1,3 +1,6 @@
 package io.mosip.vercred.vcverifier.exception
 
-class SignatureVerificationException(message: String?) : BaseUncheckedException(message)
+class SignatureVerificationException @JvmOverloads constructor(
+    message: String?,
+    val errorCode: String? = null
+) : BaseUncheckedException(message)
