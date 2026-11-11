@@ -11,12 +11,15 @@ import co.nstant.`in`.cbor.model.UnicodeString
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_MSO
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_GENERIC
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_ISSUER_SIGNED_ITEM
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_NAME_SPACES_ENCODING
 import io.mosip.vercred.vcverifier.credentialverifier.VerifiableCredential
 import io.mosip.vercred.vcverifier.credentialverifier.validator.MsoMdocValidator
 import io.mosip.vercred.vcverifier.credentialverifier.verifier.MsoMdocVerifier
 import io.mosip.vercred.vcverifier.data.ValidationStatus
 import io.mosip.vercred.vcverifier.exception.ValidationException
 import io.mosip.vercred.vcverifier.utils.Base64Decoder
+import org.bouncycastle.asn1.x509.Extension
 import java.io.ByteArrayInputStream
 import java.util.logging.Logger
 
@@ -39,13 +42,19 @@ internal const val DOC_TYPE = "docType"
 internal const val DIGEST_ALGORITHM = "digestAlgorithm"
 internal const val DIGEST_ID = "digestID"
 internal const val RANDOM = "random"
+internal const val ELEMENT_IDENTIFIER = "elementIdentifier"
 internal const val VALUE_DIGESTS = "valueDigests"
 internal const val NAME_SPACES = "nameSpaces"
 internal const val MDL_DOCTYPE = "org.iso.18013.5.1.mDL"
 internal const val MDL_NAMESPACE = "org.iso.18013.5.1"
 internal const val MDL_DS_EKU = "1.0.18013.5.1.2"
-internal const val KEY_USAGE_OID = "2.5.29.15"
-internal const val EXTENDED_KEY_USAGE_OID = "2.5.29.37"
+internal val KEY_USAGE_OID: String = Extension.keyUsage.id
+internal val EXTENDED_KEY_USAGE_OID: String = Extension.extendedKeyUsage.id
+/** Index of the digitalSignature bit in [java.security.cert.X509Certificate.getKeyUsage]. */
+internal const val KEY_USAGE_DIGITAL_SIGNATURE = 0
+internal const val VALIDITY_INFO = "validityInfo"
+internal const val SIGNED = "signed"
+internal const val EXPECTED_UPDATE = "expectedUpdate"
 /** ISO 18013-5: digestID values must be less than 2^31. */
 internal val DIGEST_ID_MAX_EXCLUSIVE = java.math.BigInteger.valueOf(1L shl 31)
 internal const val MIN_DIGEST_SALT_BYTES = 16
@@ -65,7 +74,7 @@ class MsoMdocVerifiableCredential(
 
     override fun validate(credential: String): ValidationStatus {
         try {
-            MsoMdocValidator().validate(credential)
+            MsoMdocValidator(options).validate(credential)
             return ValidationStatus("", "")
         } catch (exception: Exception) {
             return when (exception) {
@@ -130,8 +139,15 @@ class MsoMdocVerifiableCredential(
      *     "nameSpaces": {...}
      *   }
      * ```
+     *
+     * @param captureRawNameSpaces when true (verification), also captures the as-received
+     * IssuerSignedItemBytes used for digest checks. Validation does not need them, so it skips
+     * the extra byte scan.
      */
-    fun parse(credential: String): Triple<Map, MsoMdocCredentialData, Boolean> {
+    fun parse(
+        credential: String,
+        captureRawNameSpaces: Boolean = true,
+    ): Triple<Map, MsoMdocCredentialData, Boolean> {
         val decodedData: ByteArray = try {
             Base64Decoder().decodeFromBase64Url(credential)
         } catch (exception: Exception) {
@@ -152,13 +168,13 @@ class MsoMdocVerifiableCredential(
         validateMsoPayload(issuerAuth, isLatest)
         val mso = issuerAuth.extractMso()
         val docType = mso.get(UnicodeString(DOC_TYPE))
-        val encodedNameSpaceItems = try {
+        val encodedNameSpaceItems = if (!captureRawNameSpaces) emptyMap() else try {
             MsoMdocNameSpacesRawBytes.extract(decodedData)
         } catch (exception: Exception) {
             logger.severe("Failed to capture as-received nameSpaces item bytes: ${exception.message}")
             throw ValidationException(
-                "Failed to capture as-received IssuerSignedItemBytes",
-                ERROR_CODE_INVALID_MSO
+                ERROR_MESSAGE_INVALID_NAME_SPACES_ENCODING,
+                ERROR_CODE_INVALID_ISSUER_SIGNED_ITEM
             )
         }
 

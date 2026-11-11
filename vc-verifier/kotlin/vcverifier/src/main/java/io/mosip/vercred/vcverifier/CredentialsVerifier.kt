@@ -11,6 +11,7 @@ import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.MsoMdocVerif
 import io.mosip.vercred.vcverifier.data.CredentialStatusResult
 import io.mosip.vercred.vcverifier.data.CredentialVerificationSummary
 import io.mosip.vercred.vcverifier.data.VerificationResult
+import io.mosip.vercred.vcverifier.exception.LikelyTamperedException
 import io.mosip.vercred.vcverifier.exception.ValidationException
 import java.util.logging.Logger
 
@@ -41,8 +42,9 @@ class CredentialsVerifier {
     }
 
     /**
-     * @param mdocStrictProfile when [credentialFormat] is mso_mdoc, enforces mDL DS EKU and
-     * ISO Table 5 field checks (issue #300). Set false temporarily for non-conformant Certify fixtures.
+     * @param mdocStrictProfile when [credentialFormat] is mso_mdoc, enforces mDL DS KeyUsage/EKU and
+     * ISO Table 5 field checks (issue #300). Defaults to true; Inji Verify and the wallet must pass
+     * false (via a config property) until Certify DS certificates conform (inji-certify#1123).
      */
     @JvmOverloads
     fun verify(
@@ -82,6 +84,10 @@ class CredentialsVerifier {
             )
 
         } catch (e: ValidationException) {
+            VerificationResult(false, e.errorMessage, e.errorCode)
+        } catch (e: LikelyTamperedException) {
+            // Must not fall into the generic catch, which would reuse the validation code
+            // (e.g. an expired + tampered mDL would otherwise report ERR_VC_EXPIRED).
             VerificationResult(false, e.errorMessage, e.errorCode)
         } catch (e: Exception) {
             val errorCode = validationStatus.validationErrorCode.takeIf { !it.isNullOrEmpty() }

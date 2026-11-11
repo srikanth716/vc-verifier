@@ -123,13 +123,7 @@ internal object MsoMdocDataElementValidator {
     }
 
     private fun collectMsoMdlDigestIds(mso: Map): Set<BigInteger> {
-        val valueDigestsRoot = mso.getOrNull(VALUE_DIGESTS) as? Map ?: return emptySet()
-        val byNamespace: Map =
-            if (valueDigestsRoot.keys.contains(UnicodeString(NAME_SPACES))) {
-                valueDigestsRoot[NAME_SPACES] as? Map ?: return emptySet()
-            } else {
-                valueDigestsRoot
-            }
+        val byNamespace = mso.getOrNull(VALUE_DIGESTS) as? Map ?: return emptySet()
         val mdlDigests = byNamespace[UnicodeString(MDL_NAMESPACE)] as? Map ?: return emptySet()
         return mdlDigests.keys.mapNotNull { key ->
             (key as? UnsignedInteger)?.value
@@ -165,7 +159,7 @@ internal object MsoMdocDataElementValidator {
                 if (item !is ByteString) return@forEach
                 val decoded = CborDecoder(ByteArrayInputStream(item.bytes)).decode()[0] as? Map
                     ?: return@forEach
-                val identifier = (decoded["elementIdentifier"] as? UnicodeString)?.string ?: return@forEach
+                val identifier = (decoded[ELEMENT_IDENTIFIER] as? UnicodeString)?.string ?: return@forEach
                 val value = decoded["elementValue"] ?: return@forEach
                 result[identifier] = value
             }

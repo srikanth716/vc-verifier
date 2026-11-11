@@ -945,7 +945,12 @@ For other unknown exceptions, error code will be `ERR_GENERIC`
 | MSO signed outside DS cert            | ERR_INVALID_SIGNED_OUTSIDE_DS_CERT |
 | issuing_country                       | ERR_INVALID_ISSUING_COUNTRY     |
 | issuing_jurisdiction                  | ERR_INVALID_ISSUING_JURISDICTION |
-| valueDigests mismatch / missing       | ERR_INVALID_VALUE_DIGESTS       |
+| valueDigests structure (not ISO layout) | ERR_INVALID_MSO               |
+| nameSpaces bytes unavailable           | ERR_INVALID_VALUE_DIGESTS       |
+| digest mismatch / namespace or digestID not in MSO | ERR_LIKELY_TAMPERED |
+| duplicate elementIdentifier / undecodable nameSpaces | ERR_INVALID_ISSUER_SIGNED_ITEM |
+| DS certificate subject unparseable    | ERR_INVALID_DS_CERT_SUBJECT     |
+| MSO signed missing / invalid / future | ERR_INVALID_VALIDITY_INFO_MSO   |
 | duplicate digestID                    | ERR_INVALID_DIGEST_ID           |
 | nameSpaces record not tag-24          | ERR_INVALID_ISSUER_SIGNED_ITEM  |
 | COSE protected `alg` missing          | ERR_MISSING_ALG                 |

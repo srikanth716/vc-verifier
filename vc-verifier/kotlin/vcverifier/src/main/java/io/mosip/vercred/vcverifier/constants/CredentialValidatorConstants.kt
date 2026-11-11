@@ -116,6 +116,14 @@ object CredentialValidatorConstants {
     const val ERROR_MESSAGE_INVALID_VALUE_DIGESTS =
         "valueDigests verification failed - mismatch or missing digest for a received record"
 
+    const val ERROR_CODE_LIKELY_TAMPERED = "ERR_LIKELY_TAMPERED"
+    const val ERROR_MESSAGE_LIKELY_TAMPERED =
+        "Credential data does not match the issuer-signed digests and is likely tampered"
+
+    const val ERROR_CODE_INVALID_DS_CERT_SUBJECT = "${ERROR_CODE_INVALID}DS_CERT_SUBJECT"
+    const val ERROR_MESSAGE_INVALID_DS_CERT_SUBJECT =
+        "DS certificate subject could not be parsed"
+
     const val ERROR_CODE_INVALID_DIGEST_ID = "${ERROR_CODE_INVALID}DIGEST_ID"
     const val ERROR_MESSAGE_INVALID_DIGEST_ID =
         "Duplicate digestID found in a namespace"
@@ -160,6 +168,14 @@ object CredentialValidatorConstants {
     const val ERROR_CODE_INVALID_ISSUER_SIGNED_ITEM = "${ERROR_CODE_INVALID}ISSUER_SIGNED_ITEM"
     const val ERROR_MESSAGE_INVALID_ISSUER_SIGNED_ITEM =
         "Each nameSpaces record must be a tag-24 byte string"
+    const val ERROR_MESSAGE_DUPLICATE_ELEMENT_IDENTIFIER =
+        "Duplicate elementIdentifier found in a namespace"
+    const val ERROR_MESSAGE_INVALID_NAME_SPACES_ENCODING =
+        "Failed to capture as-received IssuerSignedItemBytes"
+
+    const val ERROR_MESSAGE_INVALID_VALUE_DIGESTS_STRUCTURE =
+        "valueDigests must map each namespace to a map of digestID (uint) to digest (bstr)"
+    const val ERROR_MESSAGE_MISSING_SIGNED_MSO = "validityInfo->signed is missing in the MSO of the credential"
 
     const val ERROR_CODE_INVALID_MSO_DATE_FORMAT = "${ERROR_CODE_INVALID}MSO_DATE_FORMAT"
     const val ERROR_MESSAGE_INVALID_MSO_DATE_FORMAT =

@@ -25,6 +25,17 @@ import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_ISSUING_JURISDICTION
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_SIGNED_OUTSIDE_DS_CERT
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_VALUE_DIGESTS
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_DS_CERT_SUBJECT
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_MSO
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_VALIDITY_INFO_MSO
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_LIKELY_TAMPERED
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_DUPLICATE_ELEMENT_IDENTIFIER
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_LIKELY_TAMPERED
+import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.MDOC_CLOCK_SKEW_TOLERANCE_MS
+import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.MsoMdocVerificationOptions
+import io.mosip.vercred.vcverifier.exception.LikelyTamperedException
+import org.bouncycastle.asn1.x509.KeyUsage
+import testutils.MsoMdocTestCredentialFactory.Shape
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_MISSING_ALG
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_DIGEST_ID_OUT_OF_RANGE
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_DIGEST_ALGORITHM
@@ -49,6 +60,17 @@ import org.junit.jupiter.api.Test
 import java.io.ByteArrayOutputStream
 import java.lang.reflect.InvocationTargetException
 import java.time.Instant
+
+/** Inside the validity of the real Certify fixture DS certificates (2026-07-13 .. 2029-07-12). */
+private val CERTIFY_FIXTURE_NOW: Instant = Instant.parse("2026-08-01T00:00:00Z")
+
+/** The missing-EKU fixture is signed 2026-10-14; its DS certificate expires 2028-12-10. */
+private val MISSING_EKU_FIXTURE_NOW: Instant = Instant.parse("2027-01-01T00:00:00Z")
+
+private fun optionsAt(now: Instant, strict: Boolean = true) =
+    MsoMdocVerificationOptions(strictMdlProfile = strict, currentTimeMillis = { now.toEpochMilli() })
+
+private fun verifierAt(now: Instant, strict: Boolean = true) = MsoMdocVerifier(optionsAt(now, strict))
 
 class MsoMdocVerifierTest {
     val validMdoc =
@@ -85,7 +107,7 @@ class MsoMdocVerifierTest {
     @Test
     fun `should fail current fixtures on missing mDL DS EKU until certify provides conformant certs`() {
         val exception = assertThrows(ValidationException::class.java) {
-            MsoMdocVerifier().verify(
+            verifierAt(CERTIFY_FIXTURE_NOW).verify(
                 "omppc3N1ZXJBdXRohEOhASahGCFZAxQwggMQMIIB-KADAgECAggGru5Xjrda-DANBgkqhkiG9w0BAQsFADB4MQswCQYDVQQGEwJJTjELMAkGA1UECAwCS0ExEjAQBgNVBAcMCUJBTkdBTE9SRTEOMAwGA1UECgwFSUlJVEIxFzAVBgNVBAsMDkVYQU1QTEUtQ0VOVEVSMR8wHQYDVQQDDBZ3d3cuZXhhbXBsZS5jb20gKFJPT1QpMB4XDTI2MDcxMzA2MzY0NloXDTI5MDcxMjA2MzY0NlowgZsxCzAJBgNVBAYTAklOMQswCQYDVQQIDAJLQTESMBAGA1UEBwwJQkFOR0FMT1JFMQ4wDAYDVQQKDAVJSUlUQjEXMBUGA1UECwwORVhBTVBMRS1DRU5URVIxQjBABgNVBAMMOXd3dy5leGFtcGxlLmNvbSAoQ0VSVElGWV9WQ19TSUdOX0VDX1IxLUVDX1NFQ1AyNTZSMV9TSUdOKTBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABCxNsdJnJDCpzS-oiskMiAXKts0KfSq0bKAcAF9AIVcylo234k6c5ze6zd-LYUq4qZt2Epj0JtzVJzWtXJBmy5-jRTBDMBIGA1UdEwEB_wQIMAYBAf8CAQEwHQYDVR0OBBYEFNTUxJGN9cvnw0bkpOY7hXCOgEIgMA4GA1UdDwEB_wQEAwIChDANBgkqhkiG9w0BAQsFAAOCAQEAdCMKCVQqQFNuXfZVD2JrmGHMdqmBsyEITavF8uIjOUu39qaaXyhvLeCggP7PjXJ8Cu141VKCkj6XHtvHM5iqCQsAQpjgzp6Hi27sau_yKLOOKBz8E2G9N9-skn9UiVJqSeZLOl_gRcPhbxVndQp7FZ4cdct4r_kObVt-W-BTlDJWjz54bPVhInnFfLpv2KlSqASRBIpbasMehVaYR7E9Rq_Ya5Ms5A8MYzXzdLeBdSWJCIyxmHasTax6cVM5GdqpAOjbJF_7k7X4JHBEIiDrJ_O0p9zwpBWdAn_Kb-oCe3VQHzrmeCsp2uyNRvzEqJ5Yd5b26-V8C8yBj7P7Uaa-PlkCUNgYWQJLpmdkb2NUeXBldW9yZy5pc28uMTgwMTMuNS4xLm1ETGd2ZXJzaW9uYzEuMGx2YWxpZGl0eUluZm-jZnNpZ25lZMB4GzIwMjYtMDctMjBUMDQ6NDc6NDIuNzE2OTA5Wml2YWxpZEZyb23AeBsyMDI2LTA3LTIwVDA0OjQ3OjQyLjcxNjkwOVpqdmFsaWRVbnRpbMB4GDIwMjgtMDctMjBUMDQ6NDc6NDIuNzE3Wmx2YWx1ZURpZ2VzdHOhcW9yZy5pc28uMTgwMTMuNS4xpgBYILcu1K9SpiobtelCZX5_BHQrOJCCoaXtJCGX35eeFnQSAVggApvPGQYz3DLYRbetDpT0-31okQ5uzWRwzrff00yMD7oCWCD4d3HGgi-70QBlGoiU5nggSPzpSI5GkxXdsOyG4ArVLgNYIOQbLhdNqN_8kCZzqVswmMeQ6MtpvttlT16uBgWMKdFyBFgg_hMVI7VctilrrgdQPGCdIEL4VgkVVaEMEvKcIY_xJKUFWCAtv66ml2lD15WYUUzAS6gJYj1DALcrbw9xjFFrZkhUuG1kZXZpY2VLZXlJbmZvoWlkZXZpY2VLZXmmAQICWCtlNjVnMnVDNmJCMEREZGZNRzhTYlZ2TDFNSWxSNENxcGRoUWE4YmZQUDNVAyYgASFYILQicKMUp8767SCHDrTO6yWjmAm-WIjudd3pRo_zI7myIlggPBprbay4iRPtNiVtbVob_u3AQxpRmqWQSup7zPyNuLlvZGlnZXN0QWxnb3JpdGhtZ1NIQS0yNTZYQBCVJ3YkZ1ETAuhULd1ZGTv6ONhH_NsP61FIfpe69uLWEBThcUiJq7y_KRMms9KVi7pYcU3WhiNlOUC6hSYrB_1qbmFtZVNwYWNlc6Fxb3JnLmlzby4xODAxMy41LjGG2BhYZaRmcmFuZG9tWBiq53HDBUk9X9igBaZDmBelpFQndR2-nl9oZGlnZXN0SUQAbGVsZW1lbnRWYWx1ZW0ke2ZhbWlseU5hbWV9cWVsZW1lbnRJZGVudGlmaWVya2ZhbWlseV9uYW1l2BhYY6RmcmFuZG9tWBgvL1T9pXgeuDdhIpe9VL0dEFL8IXB5rkJoZGlnZXN0SUQBbGVsZW1lbnRWYWx1ZWwke2dpdmVuTmFtZX1xZWxlbWVudElkZW50aWZpZXJqZ2l2ZW5fbmFtZdgYWGOkZnJhbmRvbVgYMuPQgcDhX9FgtaLBg5aC2SmZpPPsyUYlaGRpZ2VzdElEAmxlbGVtZW50VmFsdWVsJHtiaXJ0aERhdGV9cWVsZW1lbnRJZGVudGlmaWVyamJpcnRoX2RhdGXYGFhepGZyYW5kb21YGG9QaSwv6jAPrlLBDqMcpymi-NiA9MEChGhkaWdlc3RJRANsZWxlbWVudFZhbHVlYklOcWVsZW1lbnRJZGVudGlmaWVyb2lzc3VpbmdfY291bnRyedgYWG2kZnJhbmRvbVgYKA4VkRJdH22UPLypb9bl72lXGuja-E2xaGRpZ2VzdElEBGxlbGVtZW50VmFsdWVxJHtkb2N1bWVudE51bWJlcn1xZWxlbWVudElkZW50aWZpZXJvZG9jdW1lbnRfbnVtYmVy2BhYYKRmcmFuZG9tWBhb4Thi6agJuh0LXOhY3pRuffpIZgeZq9xoZGlnZXN0SUQFbGVsZW1lbnRWYWx1ZWske3BvcnRyYWl0fXFlbGVtZW50SWRlbnRpZmllcmhwb3J0cmFpdA"
             )
         }
@@ -128,7 +150,7 @@ class MsoMdocVerifierTest {
     }
 
     @Test
-    fun `should throw ERR_INVALID_VALUE_DIGESTS when received digest does not match MSO`() {
+    fun `should throw LikelyTamperedException when received digest does not match MSO`() {
         val issuerSignedItem = CborMap().apply {
             put(UnicodeString("digestID"), UnsignedInteger(1))
             put(UnicodeString("random"), ByteString(ByteArray(16)))
@@ -158,8 +180,9 @@ class MsoMdocVerifierTest {
             )
         }
 
-        val validationException = invokeVerifyValueDigests(namespaces, encodedItems, mso)
-        assertEquals(ERROR_CODE_INVALID_VALUE_DIGESTS, validationException.errorCode)
+        val exception = invokeVerifyValueDigestsThrowing(namespaces, encodedItems, mso) as LikelyTamperedException
+        assertEquals(ERROR_CODE_LIKELY_TAMPERED, exception.errorCode)
+        assertEquals(ERROR_MESSAGE_LIKELY_TAMPERED, exception.errorMessage)
     }
 
     @Test
@@ -228,70 +251,24 @@ class MsoMdocVerifierTest {
 
     @Test
     fun `should throw ERR_INVALID_ISSUING_COUNTRY when claim country mismatches DS C`() {
-        val issuerSignedItem = CborMap().apply {
-            put(UnicodeString("digestID"), UnsignedInteger(1))
-            put(UnicodeString("random"), ByteString(ByteArray(16)))
-            put(UnicodeString("elementIdentifier"), UnicodeString("issuing_country"))
-            put(UnicodeString("elementValue"), UnicodeString("SA"))
-        }
-        val itemBytes = ByteArrayOutputStream().also { CborEncoder(it).encode(issuerSignedItem) }.toByteArray()
-        val namespaces = CborMap().apply {
-            put(
-                UnicodeString("org.iso.18013.5.1"),
-                CborArray().apply { add(ByteString(itemBytes)) }
-            )
-        }
-        val certificate = io.mockk.mockk<java.security.cert.X509Certificate>()
-        every { certificate.subjectX500Principal } returns javax.security.auth.x500.X500Principal(
-            "CN=Doe\\, Esq,C=IN"
+        val credential = MsoMdocTestCredentialFactory.create(
+            records = MsoMdocTestCredentialFactory.recordsWith("issuing_country", UnicodeString("SA")),
         )
-
-        val verifier = MsoMdocVerifier()
-        val method = verifier.javaClass.getDeclaredMethod(
-            "verifyCountryName",
-            java.security.cert.X509Certificate::class.java,
-            CborMap::class.java
-        )
-        method.isAccessible = true
-        val invocationException = assertThrows(InvocationTargetException::class.java) {
-            method.invoke(verifier, certificate, namespaces)
+        val exception = assertThrows(ValidationException::class.java) {
+            MsoMdocVerifier().verify(credential)
         }
-        val validationException = invocationException.targetException as ValidationException
-        assertEquals(ERROR_CODE_INVALID_ISSUING_COUNTRY, validationException.errorCode)
+        assertEquals(ERROR_CODE_INVALID_ISSUING_COUNTRY, exception.errorCode)
     }
 
     @Test
     fun `should throw ERR_INVALID_ISSUING_JURISDICTION when claim state mismatches DS ST`() {
-        val issuerSignedItem = CborMap().apply {
-            put(UnicodeString("digestID"), UnsignedInteger(1))
-            put(UnicodeString("random"), ByteString(ByteArray(16)))
-            put(UnicodeString("elementIdentifier"), UnicodeString("issuing_jurisdiction"))
-            put(UnicodeString("elementValue"), UnicodeString("KA"))
-        }
-        val itemBytes = ByteArrayOutputStream().also { CborEncoder(it).encode(issuerSignedItem) }.toByteArray()
-        val namespaces = CborMap().apply {
-            put(
-                UnicodeString("org.iso.18013.5.1"),
-                CborArray().apply { add(ByteString(itemBytes)) }
-            )
-        }
-        val certificate = io.mockk.mockk<java.security.cert.X509Certificate>()
-        every { certificate.subjectX500Principal } returns javax.security.auth.x500.X500Principal(
-            "C=IN,ST=MH,CN=Mock DS"
+        val credential = MsoMdocTestCredentialFactory.create(
+            records = MsoMdocTestCredentialFactory.recordsWith("issuing_jurisdiction", UnicodeString("MH")),
         )
-
-        val verifier = MsoMdocVerifier()
-        val method = verifier.javaClass.getDeclaredMethod(
-            "verifyIssuingJurisdiction",
-            java.security.cert.X509Certificate::class.java,
-            CborMap::class.java
-        )
-        method.isAccessible = true
-        val invocationException = assertThrows(InvocationTargetException::class.java) {
-            method.invoke(verifier, certificate, namespaces)
+        val exception = assertThrows(ValidationException::class.java) {
+            MsoMdocVerifier().verify(credential)
         }
-        val validationException = invocationException.targetException as ValidationException
-        assertEquals(ERROR_CODE_INVALID_ISSUING_JURISDICTION, validationException.errorCode)
+        assertEquals(ERROR_CODE_INVALID_ISSUING_JURISDICTION, exception.errorCode)
     }
 
     @Test
@@ -310,12 +287,12 @@ class MsoMdocVerifierTest {
             .bufferedReader()
             .use { it.readText().trim() }
 
-        val validation = MsoMdocVerifiableCredential().validate(credential)
+        val validation = MsoMdocVerifiableCredential(optionsAt(MISSING_EKU_FIXTURE_NOW)).validate(credential)
         assertEquals("", validation.validationMessage)
         assertEquals("", validation.validationErrorCode)
 
         val exception = assertThrows(ValidationException::class.java) {
-            MsoMdocVerifier().verify(credential)
+            verifierAt(MISSING_EKU_FIXTURE_NOW).verify(credential)
         }
         // Certify DS cert currently lacks critical EKU 1.0.18013.5.1.2 (inji-certify#1123).
         // Disclosed claims also omit mandatory issuing_country, so country check would fail next.
@@ -351,7 +328,7 @@ class MsoMdocVerifierTest {
     }
 
     @Test
-    fun `should fail when KeyUsage lacks digitalSignature but EKU is present`() {
+    fun `should fail when DS certificate has no KeyUsage extension but EKU is present`() {
         val credential = MsoMdocTestCredentialFactory.create(includeKeyUsage = false)
 
         val exception = assertThrows(ValidationException::class.java) {
@@ -633,14 +610,15 @@ class MsoMdocVerifierTest {
             )
         }
 
-        val exception = invokeVerifyValueDigests(
+        val exception = invokeVerifyValueDigestsThrowing(
             namespaces,
             mapOf("org.iso.18013.5.1" to listOf(encodedTaggedItem)),
             mso,
-        )
+        ) as LikelyTamperedException
 
-        assertEquals(ERROR_CODE_INVALID_VALUE_DIGESTS, exception.errorCode)
-        assertTrue(exception.errorMessage.contains("digestID 1"))
+        assertEquals(ERROR_CODE_LIKELY_TAMPERED, exception.errorCode)
+        assertFalse(exception.errorMessage.contains("digestID"))
+        assertFalse(exception.errorMessage.contains("org.iso.18013.5.1"))
     }
 
     @Test
@@ -696,25 +674,18 @@ class MsoMdocVerifierTest {
 
     @Test
     fun `should throw when duplicate digestID is present in a namespace`() {
-        val issuerSignedItem = CborMap().apply {
-            put(UnicodeString("digestID"), UnsignedInteger(1))
-            put(UnicodeString("random"), ByteString(ByteArray(16)))
-            put(UnicodeString("elementIdentifier"), UnicodeString("family_name"))
-            put(UnicodeString("elementValue"), UnicodeString("Doe"))
-        }
-        val itemBytes = ByteArrayOutputStream().also { CborEncoder(it).encode(issuerSignedItem) }.toByteArray()
-        val taggedItem = ByteString(itemBytes).apply { setTag(24) }
-        val encodedItem = ByteArrayOutputStream().also { CborEncoder(it).encode(taggedItem) }.toByteArray()
+        val (taggedItem, encodedItem) = taggedIssuerSignedItem(1, "family_name", "Doe")
+        val (otherTaggedItem, otherEncodedItem) = taggedIssuerSignedItem(1, "given_name", "Jane")
 
         val namespace = UnicodeString("org.iso.18013.5.1")
         val namespaces = CborMap().apply {
             put(namespace, CborArray().apply {
                 add(taggedItem)
-                add(taggedItem)
+                add(otherTaggedItem)
             })
         }
         val encodedItems = mapOf(
-            "org.iso.18013.5.1" to listOf(encodedItem, encodedItem)
+            "org.iso.18013.5.1" to listOf(encodedItem, otherEncodedItem)
         )
         val mso = CborMap().apply {
             put(UnicodeString("digestAlgorithm"), UnicodeString("SHA-256"))
@@ -791,7 +762,13 @@ class MsoMdocVerifierTest {
         namespaces: CborMap,
         encodedItems: Map<String, List<ByteArray>>,
         mso: CborMap,
-    ): ValidationException {
+    ): ValidationException = invokeVerifyValueDigestsThrowing(namespaces, encodedItems, mso) as ValidationException
+
+    private fun invokeVerifyValueDigestsThrowing(
+        namespaces: CborMap,
+        encodedItems: Map<String, List<ByteArray>>,
+        mso: CborMap,
+    ): Throwable {
         val verifier = MsoMdocVerifier()
         val method = verifier.javaClass.getDeclaredMethod(
             "verifyValueDigests",
@@ -803,6 +780,417 @@ class MsoMdocVerifierTest {
         val invocationException = assertThrows(InvocationTargetException::class.java) {
             method.invoke(verifier, namespaces, encodedItems, mso)
         }
-        return invocationException.targetException as ValidationException
+        return invocationException.targetException
+    }
+
+    private fun taggedIssuerSignedItem(digestId: Long, identifier: String, value: String): Pair<ByteString, ByteArray> {
+        val item = CborMap().apply {
+            put(UnicodeString("digestID"), UnsignedInteger(digestId))
+            put(UnicodeString("random"), ByteString(ByteArray(16)))
+            put(UnicodeString("elementIdentifier"), UnicodeString(identifier))
+            put(UnicodeString("elementValue"), UnicodeString(value))
+        }
+        val itemBytes = ByteArrayOutputStream().also { CborEncoder(it).encode(item) }.toByteArray()
+        val tagged = ByteString(itemBytes).apply { setTag(24) }
+        return tagged to ByteArrayOutputStream().also { CborEncoder(it).encode(tagged) }.toByteArray()
+    }
+
+    private val factory = MsoMdocTestCredentialFactory
+
+    private fun allMandatoryExcept(identifier: String): Set<String> =
+        factory.mandatoryRecords().map { it.first }.toSet() - identifier
+
+    private fun assertVerifyFails(code: String, verifier: MsoMdocVerifier, credential: String) {
+        val exception = assertThrows(ValidationException::class.java) { verifier.verify(credential) }
+        assertEquals(code, exception.errorCode)
+    }
+
+    @org.junit.jupiter.api.Nested
+    inner class `S1-1 DS certificate validity` {
+        private val notBefore = Instant.parse("2025-01-01T00:00:00Z")
+        private val notAfter = Instant.parse("2027-01-01T00:00:00Z")
+        private val certificate = factory.generateCertificate(notBefore = notBefore, notAfter = notAfter)
+
+        private fun credentialAt(now: Instant, signed: Instant = now) =
+            factory.create(certificate = certificate, now = now, signed = signed, validFrom = signed)
+
+        @Test
+        fun `should pass exactly at notBefore`() {
+            assertTrue(verifierAt(notBefore).verify(credentialAt(notBefore)))
+        }
+
+        @Test
+        fun `should pass exactly at notAfter`() {
+            assertTrue(verifierAt(notAfter).verify(credentialAt(notAfter, signed = notAfter.minusSeconds(60))))
+        }
+
+        @Test
+        fun `should pass just inside the tolerance before notBefore`() {
+            val now = notBefore.minusMillis(MDOC_CLOCK_SKEW_TOLERANCE_MS)
+            assertTrue(verifierAt(now).verify(credentialAt(notBefore, signed = notBefore)))
+        }
+
+        @Test
+        fun `should fail not-yet-valid DS certificate just outside the tolerance`() {
+            val now = notBefore.minusMillis(MDOC_CLOCK_SKEW_TOLERANCE_MS + 1)
+            assertVerifyFails(
+                ERROR_CODE_INVALID_DS_CERT_VALIDITY,
+                verifierAt(now),
+                credentialAt(notBefore, signed = notBefore),
+            )
+        }
+
+        @Test
+        fun `should pass just inside the tolerance after notAfter`() {
+            val now = notAfter.plusMillis(MDOC_CLOCK_SKEW_TOLERANCE_MS)
+            assertTrue(verifierAt(now).verify(credentialAt(notAfter, signed = notAfter.minusSeconds(60))))
+        }
+
+        @Test
+        fun `should fail expired DS certificate just outside the tolerance`() {
+            val now = notAfter.plusMillis(MDOC_CLOCK_SKEW_TOLERANCE_MS + 1)
+            assertVerifyFails(
+                ERROR_CODE_INVALID_DS_CERT_VALIDITY,
+                verifierAt(now),
+                credentialAt(notAfter, signed = notAfter.minusSeconds(60)),
+            )
+        }
+    }
+
+    @org.junit.jupiter.api.Nested
+    inner class `S1-2 DS certificate KeyUsage and EKU` {
+        @Test
+        fun `should pass with a conformant DS certificate`() {
+            assertTrue(MsoMdocVerifier().verify(factory.create(certificate = factory.generateCertificate())))
+        }
+
+        @Test
+        fun `should fail when KeyUsage is present without digitalSignature`() {
+            val certificate = factory.generateCertificate(keyUsage = KeyUsage.keyCertSign)
+            assertVerifyFails(
+                ERROR_CODE_INVALID_DS_CERT_KEY_USAGE,
+                MsoMdocVerifier(),
+                factory.create(certificate = certificate),
+            )
+        }
+
+        @Test
+        fun `should fail when KeyUsage is not critical`() {
+            val certificate = factory.generateCertificate(keyUsageCritical = false)
+            assertVerifyFails(
+                ERROR_CODE_INVALID_DS_CERT_KEY_USAGE,
+                MsoMdocVerifier(),
+                factory.create(certificate = certificate),
+            )
+        }
+
+        @Test
+        fun `should fail when EKU is not critical`() {
+            val certificate = factory.generateCertificate(ekuCritical = false)
+            assertVerifyFails(
+                ERROR_CODE_INVALID_DS_CERT_EKU,
+                MsoMdocVerifier(),
+                factory.create(certificate = certificate),
+            )
+        }
+
+        @Test
+        fun `should fail when EKU holds another OID`() {
+            val certificate = factory.generateCertificate(ekuOid = "1.3.6.1.5.5.7.3.4")
+            assertVerifyFails(
+                ERROR_CODE_INVALID_DS_CERT_EKU,
+                MsoMdocVerifier(),
+                factory.create(certificate = certificate),
+            )
+        }
+
+        @Test
+        fun `should fail when EKU is missing`() {
+            val certificate = factory.generateCertificate(ekuOid = null)
+            assertVerifyFails(
+                ERROR_CODE_INVALID_DS_CERT_EKU,
+                MsoMdocVerifier(),
+                factory.create(certificate = certificate),
+            )
+        }
+
+        @Test
+        fun `should skip the profile check for a non-mDL docType`() {
+            val certificate = factory.generateCertificate(keyUsage = null, ekuOid = null)
+            val credential = factory.create(
+                certificate = certificate,
+                msoDocType = "org.example.doc",
+                topLevelDocType = "org.example.doc",
+            )
+            assertTrue(MsoMdocVerifier().verify(credential))
+        }
+
+        @Test
+        fun `should skip the profile check when strict profile is off`() {
+            val certificate = factory.generateCertificate(keyUsage = null, ekuOid = null)
+            val credential = factory.create(certificate = certificate)
+            assertTrue(MsoMdocVerifier(MsoMdocVerificationOptions(strictMdlProfile = false)).verify(credential))
+        }
+    }
+
+    @org.junit.jupiter.api.Nested
+    inner class `S1-3 digest per received item` {
+        @Test
+        fun `should pass selective disclosure with fewer elements than MSO digests`() {
+            val credential = factory.create(discloseOnly = setOf("family_name", "given_name", "issuing_country"))
+            assertTrue(MsoMdocVerifier().verify(credential))
+        }
+
+        @Test
+        fun `should report likely tampered when an element is changed after signing`() {
+            val credential = factory.create(tamperedElement = "family_name" to UnicodeString("Smith"))
+            val exception = assertThrows(LikelyTamperedException::class.java) {
+                MsoMdocVerifier().verify(credential)
+            }
+            assertEquals(ERROR_CODE_LIKELY_TAMPERED, exception.errorCode)
+        }
+
+        @Test
+        fun `should report likely tampered when a received namespace is missing from the MSO`() {
+            val credential = factory.create(
+                extraNamespaces = mapOf("org.example.ns" to listOf("extra" to UnicodeString("value"))),
+                namespacesWithoutDigests = setOf("org.example.ns"),
+            )
+            val exception = assertThrows(LikelyTamperedException::class.java) {
+                MsoMdocVerifier().verify(credential)
+            }
+            assertEquals(ERROR_CODE_LIKELY_TAMPERED, exception.errorCode)
+            assertFalse(exception.errorMessage.contains("org.example.ns"))
+        }
+
+        @Test
+        fun `should report likely tampered when a received digestID is missing from the MSO`() {
+            val credential = factory.create(omitDigestId = 0)
+            assertThrows(LikelyTamperedException::class.java) { MsoMdocVerifier().verify(credential) }
+        }
+
+        @Test
+        fun `should report the tamper code, not ERR_VC_EXPIRED, for an expired and tampered mDL`() {
+            val now = Instant.now()
+            val credential = factory.create(
+                signed = now.minusSeconds(3 * 86400),
+                validFrom = now.minusSeconds(2 * 86400),
+                validUntil = now.minusSeconds(86400),
+                records = factory.mandatoryRecords(now.minusSeconds(2 * 86400)),
+                tamperedElement = "family_name" to UnicodeString("Smith"),
+            )
+
+            val result = io.mosip.vercred.vcverifier.CredentialsVerifier().verify(
+                credential,
+                io.mosip.vercred.vcverifier.constants.CredentialFormat.MSO_MDOC,
+            )
+
+            assertFalse(result.verificationStatus)
+            assertEquals(ERROR_CODE_LIKELY_TAMPERED, result.verificationErrorCode)
+            assertEquals(ERROR_MESSAGE_LIKELY_TAMPERED, result.verificationMessage)
+        }
+
+        @Test
+        fun `should reject a non-map valueDigests entry as an invalid MSO, not tampering`() {
+            val (taggedItem, encodedItem) = taggedIssuerSignedItem(1, "family_name", "Doe")
+            val namespace = UnicodeString("org.iso.18013.5.1")
+            val namespaces = CborMap().apply { put(namespace, CborArray().apply { add(taggedItem) }) }
+            val mso = CborMap().apply {
+                put(UnicodeString("digestAlgorithm"), UnicodeString("SHA-256"))
+                put(UnicodeString("valueDigests"), CborMap().apply { put(namespace, UnicodeString("x")) })
+            }
+            val exception = invokeVerifyValueDigests(namespaces, mapOf(namespace.string to listOf(encodedItem)), mso)
+            assertEquals(ERROR_CODE_INVALID_MSO, exception.errorCode)
+        }
+    }
+
+    @org.junit.jupiter.api.Nested
+    inner class `S1-4 signed within DS certificate validity` {
+        private val notBefore = Instant.parse("2025-01-01T00:00:00Z")
+        private val notAfter = Instant.parse("2027-01-01T00:00:00Z")
+        private val certificate = factory.generateCertificate(notBefore = notBefore, notAfter = notAfter)
+
+        @Test
+        fun `should pass when signed is exactly at notBefore`() {
+            val now = Instant.parse("2026-01-01T00:00:00Z")
+            val credential = factory.create(certificate = certificate, now = now, signed = notBefore)
+            assertTrue(verifierAt(now).verify(credential))
+        }
+
+        @Test
+        fun `should pass when signed is exactly at notAfter`() {
+            val credential = factory.create(certificate = certificate, now = notAfter, signed = notAfter, validFrom = notAfter)
+            assertTrue(verifierAt(notAfter).verify(credential))
+        }
+
+        @Test
+        fun `should fail when signed is after notAfter`() {
+            val credential = factory.create(
+                certificate = certificate,
+                now = notAfter,
+                signed = notAfter.plusSeconds(1),
+                validFrom = notAfter.plusSeconds(1),
+            )
+            assertVerifyFails(ERROR_CODE_INVALID_SIGNED_OUTSIDE_DS_CERT, verifierAt(notAfter), credential)
+        }
+
+        @Test
+        fun `should fail shape B credential without signed`() {
+            val credential = factory.create(legacyShape = true, signed = null)
+            assertVerifyFails(ERROR_CODE_INVALID_VALIDITY_INFO_MSO, MsoMdocVerifier(), credential)
+        }
+
+        @Test
+        fun `should fail shape A credential without signed`() {
+            val credential = factory.create(signed = null)
+            assertVerifyFails(ERROR_CODE_INVALID_VALIDITY_INFO_MSO, MsoMdocVerifier(), credential)
+        }
+    }
+
+    @org.junit.jupiter.api.Nested
+    inner class `S1-6 issuing_country vs DS certificate C` {
+        @Test
+        fun `should pass when issuing_country is not disclosed`() {
+            // Selectively disclosed (still digested in the MSO): the #286 regression.
+            val credential = factory.create(discloseOnly = allMandatoryExcept("issuing_country"))
+            assertTrue(MsoMdocVerifier().verify(credential))
+        }
+
+        @Test
+        fun `should pass when issuing_country matches`() {
+            assertTrue(MsoMdocVerifier().verify(factory.create()))
+        }
+
+        @Test
+        fun `should fail when the DS certificate has no C`() {
+            val certificate = factory.generateCertificate(subject = "ST=KA,O=vc-verifier test")
+            assertVerifyFails(
+                ERROR_CODE_INVALID_ISSUING_COUNTRY,
+                MsoMdocVerifier(),
+                factory.create(certificate = certificate),
+            )
+        }
+
+        @Test
+        fun `should fail when a disclosed issuing_country is empty`() {
+            val credential = factory.create(records = factory.recordsWith("issuing_country", UnicodeString("")))
+            assertVerifyFails(ERROR_CODE_INVALID_ISSUING_COUNTRY, MsoMdocVerifier(), credential)
+        }
+
+        @Test
+        fun `should skip the check for a non-mDL docType`() {
+            val credential = factory.create(
+                msoDocType = "org.example.doc",
+                topLevelDocType = "org.example.doc",
+                records = factory.recordsWith("issuing_country", UnicodeString("XX")),
+            )
+            assertTrue(MsoMdocVerifier().verify(credential))
+        }
+
+        @Test
+        fun `should ignore issuing_country disclosed only in another namespace`() {
+            val credential = factory.create(
+                discloseOnly = allMandatoryExcept("issuing_country"),
+                extraNamespaces = mapOf("org.example.ns" to listOf("issuing_country" to UnicodeString("XX"))),
+            )
+            assertTrue(MsoMdocVerifier().verify(credential))
+        }
+
+        @Test
+        fun `should reject duplicate elementIdentifiers within a namespace`() {
+            val credential = factory.create(
+                records = factory.mandatoryRecords() + ("issuing_country" to UnicodeString("XX")),
+            )
+            val exception = assertThrows(ValidationException::class.java) { MsoMdocVerifier().verify(credential) }
+            assertEquals(ERROR_CODE_INVALID_ISSUER_SIGNED_ITEM, exception.errorCode)
+            assertEquals(ERROR_MESSAGE_DUPLICATE_ELEMENT_IDENTIFIER, exception.errorMessage)
+        }
+    }
+
+    @org.junit.jupiter.api.Nested
+    inner class `S1-7 issuing_jurisdiction vs DS certificate ST` {
+        @Test
+        fun `should pass when issuing_jurisdiction matches`() {
+            val credential = factory.create(records = factory.recordsWith("issuing_jurisdiction", UnicodeString("KA")))
+            assertTrue(MsoMdocVerifier().verify(credential))
+        }
+
+        @Test
+        fun `should skip when the DS certificate has no ST`() {
+            val certificate = factory.generateCertificate(subject = "C=IN,O=vc-verifier test")
+            val credential = factory.create(
+                certificate = certificate,
+                records = factory.recordsWith("issuing_jurisdiction", UnicodeString("XX")),
+            )
+            assertTrue(MsoMdocVerifier().verify(credential))
+        }
+
+        @Test
+        fun `should skip when issuing_jurisdiction is absent`() {
+            assertTrue(MsoMdocVerifier().verify(factory.create()))
+        }
+
+        @Test
+        fun `should compare the raw ST value, not the RFC 4514 escaped form`() {
+            val certificate = factory.generateCertificate(subject = "C=IN,ST=Jammu\\, Kashmir,O=vc-verifier test")
+            val credential = factory.create(
+                certificate = certificate,
+                records = factory.recordsWith("issuing_jurisdiction", UnicodeString("Jammu, Kashmir")),
+            )
+            assertTrue(MsoMdocVerifier().verify(credential))
+        }
+
+        @Test
+        fun `should fail with a certificate error when the subject is unreadable`() {
+            val principal = io.mockk.mockk<javax.security.auth.x500.X500Principal>()
+            every { principal.encoded } returns byteArrayOf(0x01, 0x02)
+            val certificate = io.mockk.mockk<java.security.cert.X509Certificate>()
+            every { certificate.subjectX500Principal } returns principal
+            val verifier = MsoMdocVerifier()
+            val method = verifier.javaClass.getDeclaredMethod(
+                "verifyIssuingJurisdiction",
+                java.security.cert.X509Certificate::class.java,
+                CborMap::class.java
+            )
+            method.isAccessible = true
+            val invocationException = assertThrows(InvocationTargetException::class.java) {
+                method.invoke(verifier, certificate, CborMap())
+            }
+            val exception = invocationException.targetException as ValidationException
+            assertEquals(ERROR_CODE_INVALID_DS_CERT_SUBJECT, exception.errorCode)
+        }
+    }
+
+    @org.junit.jupiter.api.Nested
+    inner class `S1-8 hash tag-24 bytes as received` {
+        @Test
+        fun `should verify every credential shape through public verify`() {
+            Shape.values().forEach { shape ->
+                assertTrue(MsoMdocVerifier().verify(factory.create(shape = shape)), "shape $shape")
+            }
+        }
+
+        @Test
+        fun `should verify long-form item headers through public verify`() {
+            assertTrue(MsoMdocVerifier().verify(factory.create(longFormItemHeaders = true)))
+        }
+
+        @Test
+        fun `should report likely tampered when raw bytes and parsed item disagree`() {
+            val (taggedItem, _) = taggedIssuerSignedItem(1, "family_name", "Doe")
+            val (_, otherEncodedItem) = taggedIssuerSignedItem(1, "family_name", "Smith")
+            val namespace = UnicodeString("org.iso.18013.5.1")
+            val namespaces = CborMap().apply { put(namespace, CborArray().apply { add(taggedItem) }) }
+            val mso = CborMap().apply {
+                put(UnicodeString("digestAlgorithm"), UnicodeString("SHA-256"))
+                put(UnicodeString("valueDigests"), CborMap().apply { put(namespace, CborMap()) })
+            }
+            val exception = invokeVerifyValueDigestsThrowing(
+                namespaces,
+                mapOf(namespace.string to listOf(otherEncodedItem)),
+                mso,
+            )
+            assertTrue(exception is LikelyTamperedException)
+        }
     }
 }

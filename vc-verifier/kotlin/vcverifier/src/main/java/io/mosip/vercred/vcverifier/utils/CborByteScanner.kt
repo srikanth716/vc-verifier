@@ -5,7 +5,12 @@ import java.math.BigInteger
 
 /**
  * Minimal definite-length CBOR walker used to capture exact on-the-wire item bytes.
- * Indefinite-length items are rejected — mdoc IssuerSignedItemBytes use definite encoding.
+ *
+ * Indefinite-length items are rejected. This is a deliberate restriction of this verifier,
+ * not a citation of an ISO 18013-5 clause: the scanner returns exact byte slices for hashing,
+ * and every mdoc issuer we support (including Inji Certify) emits definite-length encoding.
+ * A credential using indefinite-length encoding in the walked path fails with
+ * ERR_INVALID_ISSUER_SIGNED_ITEM instead of being hashed from a reconstructed encoding.
  */
 internal class CborByteScanner(private val data: ByteArray) {
     var position: Int = 0

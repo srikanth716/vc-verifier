@@ -79,6 +79,7 @@ dependencies {
     testImplementation(libs.mockk)
     testImplementation(libs.junitJupiter)
     testImplementation(libs.mockWebServer)
+    testImplementation(libs.bouncyCastlePkix)
 
 }
 

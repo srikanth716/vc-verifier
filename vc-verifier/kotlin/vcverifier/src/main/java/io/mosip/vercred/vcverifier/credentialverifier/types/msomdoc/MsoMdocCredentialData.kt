@@ -40,7 +40,7 @@ fun IssuerSignedNamespaces.extractFieldValue(
             val decodedIssuerSignedItem =
                 CborDecoder(ByteArrayInputStream(issuerSignedItem.bytes)).decode()[0] as Map
             val elementIdentifier: String =
-                ((decodedIssuerSignedItem["elementIdentifier"]) as UnicodeString).string
+                ((decodedIssuerSignedItem[ELEMENT_IDENTIFIER]) as UnicodeString).string
 
             if (elementIdentifier == fieldToBeExtracted) {
                 val elementValue = decodedIssuerSignedItem["elementValue"]
@@ -84,7 +84,7 @@ data class MsoMdocCredentialData(val docType: DataItem?, val issuerSigned: Issue
     data class IssuerSigned(
         val issuerAuth: IssuerAuth,
         val namespaces: IssuerSignedNamespaces,
-        val encodedNameSpaceItems: kotlin.collections.Map<String, List<ByteArray>> = emptyMap(),
+        val encodedNameSpaceItems: kotlin.collections.Map<String, List<ByteArray>>,
     )
 }
 

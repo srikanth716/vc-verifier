@@ -105,7 +105,8 @@ internal object MsoMdocNameSpacesRawBytes {
             }
             val namespace = scanner.readTextString()
             val arraySize = scanner.readArraySize()
-            val items = ArrayList<ByteArray>(arraySize)
+            // Never size from untrusted input alone: each item takes at least one byte.
+            val items = ArrayList<ByteArray>(minOf(arraySize, scanner.remaining()))
             repeat(arraySize) {
                 items.add(scanner.takeItemBytes())
             }

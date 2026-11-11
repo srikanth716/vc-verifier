@@ -1,8 +1,10 @@
 package io.mosip.vercred.vcverifier.credentialverifier.validator
 
+import co.nstant.`in`.cbor.model.ByteString
 import co.nstant.`in`.cbor.model.DataItem
 import co.nstant.`in`.cbor.model.Map
 import co.nstant.`in`.cbor.model.UnicodeString
+import co.nstant.`in`.cbor.model.UnsignedInteger
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_CURRENT_DATE_BEFORE_VALID_FROM
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_DATE_MSO
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_DIGEST_ALGORITHM
@@ -24,9 +26,19 @@ import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_VALID_FROM_MSO
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_VALID_UNTIL_MSO
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_VC_EXPIRED
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_VALUE_DIGESTS_STRUCTURE
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.VALID_FROM
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.VALID_UNTIL
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.DIGEST_ALGORITHM
+import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.DOC_TYPE
+import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.EXPECTED_UPDATE
+import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.MdocClock
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.MsoMdocVerifiableCredential
+import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.MsoMdocVerificationOptions
+import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.SIGNED
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.SUPPORTED_DIGEST_ALGORITHMS
+import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.VALIDITY_INFO
+import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.VALUE_DIGESTS
 import io.mosip.vercred.vcverifier.exception.UnknownException
 import io.mosip.vercred.vcverifier.exception.ValidationException
 import io.mosip.vercred.vcverifier.utils.CborDataItemUtils.getOrNull
@@ -36,13 +48,16 @@ import java.util.logging.Logger
 
 private const val DATE_TAG = 0L
 
-class MsoMdocValidator {
+class MsoMdocValidator(
+    private val options: MsoMdocVerificationOptions = MsoMdocVerificationOptions(),
+) {
     private val logger = Logger.getLogger(MsoMdocValidator::class.java.name)
 
 
     fun validate(credential: String): Boolean {
         try {
-            val (_, credentialData, isLatest) = MsoMdocVerifiableCredential().parse(credential)
+            val (_, credentialData, isLatest) = MsoMdocVerifiableCredential(options)
+                .parse(credential, captureRawNameSpaces = false)
 
             val mso = credentialData.mso
 
@@ -58,11 +73,11 @@ class MsoMdocValidator {
     private fun validateMsoStructure(mso: Map) {
         val mandatoryFields = listOf(
             "version",
-            "digestAlgorithm",
-            "valueDigests",
+            DIGEST_ALGORITHM,
+            VALUE_DIGESTS,
             "deviceKeyInfo",
-            "docType",
-            "validityInfo"
+            DOC_TYPE,
+            VALIDITY_INFO
         )
         mandatoryFields.forEach { mandatoryField ->
             if (mso.getOrNull(mandatoryField) == null) {
@@ -74,7 +89,7 @@ class MsoMdocValidator {
             }
         }
 
-        if (mso.getOrNull("validityInfo") !is Map) {
+        if (mso.getOrNull(VALIDITY_INFO) !is Map) {
             logger.severe("validityInfo in the credential's MSO is not a map/object as expected")
             throw ValidationException(
                 "validityInfo is not available in MSO which is expected",
@@ -100,19 +115,44 @@ class MsoMdocValidator {
                 ERROR_CODE_INVALID_DIGEST_ALGORITHM
             )
         }
+
+        validateValueDigestsLayout(mso.getOrNull(VALUE_DIGESTS))
+    }
+
+    /**
+     * ISO 18013-5 ValueDigests = { + NameSpace (tstr) => DigestIDs }, DigestIDs = { + uint => bstr }.
+     * A malformed layout is an MSO problem, so it must not surface later as a digest mismatch.
+     */
+    private fun validateValueDigestsLayout(valueDigests: DataItem?) {
+        val isValid = valueDigests is Map && valueDigests.keys.all { namespace ->
+            namespace is UnicodeString &&
+                (valueDigests[namespace] as? Map)?.let { digestIds ->
+                    digestIds.keys.all { digestId ->
+                        digestId is UnsignedInteger && digestIds[digestId] is ByteString
+                    }
+                } == true
+        }
+        if (!isValid) {
+            logger.severe("valueDigests in the credential's MSO does not follow the ISO 18013-5 layout")
+            throw ValidationException(
+                ERROR_MESSAGE_INVALID_VALUE_DIGESTS_STRUCTURE,
+                ERROR_CODE_INVALID_MSO
+            )
+        }
     }
 
     private fun validateValidityInfo(mso: Map, isLatest: Boolean) {
         /**
-        a) The elements in the ‘ValidityInfo’ structure are verified against the current time stamp
+        a) The elements in the ValidityInfo structure are verified against the current time stamp
          */
 
-        val validityInfo: Map = mso.getOrNull("validityInfo") as Map
-        val validFrom: DataItem? = validityInfo.getOrNull("validFrom")
-        val validUntil: DataItem? = validityInfo.getOrNull("validUntil")
-        val signed: DataItem? = validityInfo.getOrNull("signed")
-        val expectedUpdate: DataItem? = validityInfo.getOrNull("expectedUpdate")
-        if (validUntil == null || validFrom == null || (isLatest && signed == null)) {
+        val validityInfo: Map = mso.getOrNull(VALIDITY_INFO) as Map
+        val validFrom: DataItem? = validityInfo.getOrNull(VALID_FROM)
+        val validUntil: DataItem? = validityInfo.getOrNull(VALID_UNTIL)
+        val signed: DataItem? = validityInfo.getOrNull(SIGNED)
+        val expectedUpdate: DataItem? = validityInfo.getOrNull(EXPECTED_UPDATE)
+        // signed, validFrom and validUntil are mandatory in every MSO, whatever the credential shape.
+        if (validUntil == null || validFrom == null || signed == null) {
             logger.severe("Invalid ValidityInfo in the credential's MSO")
             throw ValidationException(
                 "Invalid validityInfo - mandatory validityInfo values are not present",
@@ -122,10 +162,10 @@ class MsoMdocValidator {
 
         val validFromString = validFrom.toString()
         val validUntilString = validUntil.toString()
-        val signedString = signed?.toString()
+        val signedString = signed.toString()
         requireValidDate(
             validFrom,
-            "validFrom",
+            VALID_FROM,
             ERROR_MESSAGE_INVALID_VALID_FROM_MSO,
             ERROR_CODE_INVALID_VALID_FROM_MSO,
             isLatest,
@@ -133,51 +173,40 @@ class MsoMdocValidator {
 
         requireValidDate(
             validUntil,
-            "validUntil",
+            VALID_UNTIL,
             ERROR_MESSAGE_INVALID_VALID_UNTIL_MSO,
             ERROR_CODE_INVALID_VALID_UNTIL_MSO,
             isLatest,
         )
-        if (isLatest) {
-            requireValidDate(
-                signed,
-                "signed",
-                ERROR_MESSAGE_INVALID_SIGNED_MSO,
-                ERROR_CODE_INVALID_VALIDITY_INFO_MSO,
-                true,
-            )
-        }
+        requireValidDate(
+            signed,
+            SIGNED,
+            ERROR_MESSAGE_INVALID_SIGNED_MSO,
+            ERROR_CODE_INVALID_VALIDITY_INFO_MSO,
+            isLatest,
+        )
         if (expectedUpdate != null) {
             requireValidDate(
                 expectedUpdate,
-                "expectedUpdate",
+                EXPECTED_UPDATE,
                 ERROR_MESSAGE_INVALID_EXPECTED_UPDATE_MSO,
                 ERROR_CODE_INVALID_VALIDITY_INFO,
                 validateTag = true,
             )
-            requireIsoMsoDateFormat(expectedUpdate.toString(), "expectedUpdate")
+            requireIsoMsoDateFormat(expectedUpdate.toString(), EXPECTED_UPDATE)
         }
 
-        requireIsoMsoDateFormat(validFromString, "validFrom")
-        requireIsoMsoDateFormat(validUntilString, "validUntil")
-        if (isLatest && signedString != null) {
-            requireIsoMsoDateFormat(signedString, "signed")
-        }
+        requireIsoMsoDateFormat(validFromString, VALID_FROM)
+        requireIsoMsoDateFormat(validUntilString, VALID_UNTIL)
+        requireIsoMsoDateFormat(signedString, SIGNED)
 
-        val isValidUntilIsPastDate =
-            !DateUtils.isFutureDateWithTolerance(validUntilString)
-        val isInvalidSignedData = isLatest && signedString != null &&
-            DateUtils.isFutureDateWithTolerance(signedString)
+        // requireValidDate above guarantees these parse.
+        val validFromMillis = parseDate(validFromString)!!.time
+        val validUntilMillis = parseDate(validUntilString)!!.time
+        val signedMillis = parseDate(signedString)!!.time
+        val now = options.currentTimeMillis()
 
-        if (isInvalidSignedData) {
-            logger.severe("Error while doing validity verification - MSO was signed with invalid date")
-            throw ValidationException(
-                ERROR_MESSAGE_INVALID_SIGNED_MSO,
-                ERROR_CODE_INVALID_VALIDITY_INFO_MSO
-            )
-        }
-
-        if (DateUtils.isFutureDateWithTolerance(validFromString)) {
+        if (MdocClock.isAfterNow(validFromMillis, now)) {
             logger.severe("Error while doing validity verification - validFrom is in the future")
             throw ValidationException(
                 ERROR_CURRENT_DATE_BEFORE_VALID_FROM,
@@ -185,14 +214,15 @@ class MsoMdocValidator {
             )
         }
 
-        val isValidUntilGreaterThanValidFrom: Boolean =
-            parseDate(validUntilString)?.after(parseDate(validFromString)) ?: false
+        if (MdocClock.isAfterNow(signedMillis, now)) {
+            logger.severe("Error while doing validity verification - MSO was signed with invalid date")
+            throw ValidationException(
+                ERROR_MESSAGE_INVALID_SIGNED_MSO,
+                ERROR_CODE_INVALID_VALIDITY_INFO_MSO
+            )
+        }
 
-        val isValidFromBeforeSigned: Boolean =
-            isLatest && signedString != null &&
-                (parseDate(validFromString)?.before(parseDate(signedString)) ?: false)
-
-        if (isValidFromBeforeSigned) {
+        if (validFromMillis < signedMillis) {
             logger.severe("Error while doing validity verification - validFrom must not be before signed in the MSO of the credential")
             throw ValidationException(
                 ERROR_MESSAGE_INVALID_VALID_FROM_MSO,
@@ -202,12 +232,13 @@ class MsoMdocValidator {
 
         // Ordering must be checked before soft-expiry so an inverted window fails hard
         // (ERR_INVALID_DATE_MSO) even when both dates are in the past.
-        if (!isValidUntilGreaterThanValidFrom) {
+        if (validUntilMillis <= validFromMillis) {
             logger.severe("Error while doing validity verification - invalid validFrom / validUntil in the MSO of the credential")
             throw ValidationException(ERROR_MESSAGE_INVALID_DATE_MSO, ERROR_CODE_INVALID_DATE_MSO)
         }
 
-        if (isValidUntilIsPastDate) {
+        // Expired only once validUntil is more than the tolerance in the past.
+        if (MdocClock.isBeforeNow(validUntilMillis, now)) {
             logger.severe("Error while doing validity verification - MSO validUntil is in the past")
             throw ValidationException(
                 ERROR_MESSAGE_VC_EXPIRED,
