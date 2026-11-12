@@ -12,15 +12,20 @@ import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_MSO
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_GENERIC
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_ISSUER_SIGNED_ITEM
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_DIGEST_ALGORITHM
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_DIGEST_ALGORITHM
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_NAME_SPACES_ENCODING
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_MSO_NOT_TAGGED
 import io.mosip.vercred.vcverifier.credentialverifier.VerifiableCredential
 import io.mosip.vercred.vcverifier.credentialverifier.validator.MsoMdocValidator
 import io.mosip.vercred.vcverifier.credentialverifier.verifier.MsoMdocVerifier
 import io.mosip.vercred.vcverifier.data.ValidationStatus
 import io.mosip.vercred.vcverifier.exception.ValidationException
 import io.mosip.vercred.vcverifier.utils.Base64Decoder
+import io.mosip.vercred.vcverifier.utils.CborDataItemUtils.getOrNull
 import org.bouncycastle.asn1.x509.Extension
 import java.io.ByteArrayInputStream
+import java.math.BigInteger
 import java.util.logging.Logger
 
 internal const val DOCUMENTS = "documents"
@@ -29,20 +34,20 @@ internal const val ISSUING_JURISDICTION = "issuing_jurisdiction"
 internal const val ISSUE_DATE = "issue_date"
 internal const val X5C = 33L
 internal const val COSE_ALG_HEADER_LABEL = 1L
-/** COSE algorithm identifiers for ECDSA (RFC 9053). */
+/** COSE algorithm identifier for ES256 (RFC 9053). */
 internal const val COSE_ALG_ES256 = -7L
-internal const val COSE_ALG_ES384 = -35L
-internal const val COSE_ALG_ES512 = -36L
-internal val SUPPORTED_COSE_ALGS = setOf(
-    java.math.BigInteger.valueOf(COSE_ALG_ES256),
-    java.math.BigInteger.valueOf(COSE_ALG_ES384),
-    java.math.BigInteger.valueOf(COSE_ALG_ES512),
-)
+/**
+ * ES256 only: the COSE signature is checked by identity-credential's coseSign1CheckSignature,
+ * which supports ES256 only. ES384 / ES512 / EdDSA are tracked in vc-verifier#302.
+ */
+internal val SUPPORTED_COSE_ALGS = setOf(BigInteger.valueOf(COSE_ALG_ES256))
 internal const val DOC_TYPE = "docType"
+internal const val VERSION = "version"
 internal const val DIGEST_ALGORITHM = "digestAlgorithm"
 internal const val DIGEST_ID = "digestID"
 internal const val RANDOM = "random"
 internal const val ELEMENT_IDENTIFIER = "elementIdentifier"
+internal const val ELEMENT_VALUE = "elementValue"
 internal const val VALUE_DIGESTS = "valueDigests"
 internal const val NAME_SPACES = "nameSpaces"
 internal const val MDL_DOCTYPE = "org.iso.18013.5.1.mDL"
@@ -56,14 +61,29 @@ internal const val VALIDITY_INFO = "validityInfo"
 internal const val SIGNED = "signed"
 internal const val EXPECTED_UPDATE = "expectedUpdate"
 /** ISO 18013-5: digestID values must be less than 2^31. */
-internal val DIGEST_ID_MAX_EXCLUSIVE = java.math.BigInteger.valueOf(1L shl 31)
+internal val DIGEST_ID_MAX_EXCLUSIVE: BigInteger = BigInteger.valueOf(1L shl 31)
 internal const val MIN_DIGEST_SALT_BYTES = 16
-internal const val MSO_VERSION_1_0 = "1.0"
+/** MSO version: major 1, any minor (e.g. "1.0", "1.1"). */
+internal val MSO_VERSION_PATTERN = Regex("""^1\.\d+$""")
 internal val SUPPORTED_DIGEST_ALGORITHMS = setOf("SHA-256", "SHA-384", "SHA-512")
+internal const val TAG_ENCODED_CBOR = 24L
 private const val ISSUER_SIGNED = "issuerSigned"
-
-
 private const val ISSUER_AUTH = "issuerAuth"
+
+/**
+ * Returns the MSO digestAlgorithm, or throws when it is missing or not SHA-256 / SHA-384 / SHA-512.
+ * Shared by validation and verification, since verify() is public and can run without validate().
+ */
+internal fun requireSupportedDigestAlgorithm(mso: Map): String {
+    val digestAlgorithm = (mso.getOrNull(DIGEST_ALGORITHM) as? UnicodeString)?.string
+    if (digestAlgorithm == null || digestAlgorithm !in SUPPORTED_DIGEST_ALGORITHMS) {
+        throw ValidationException(
+            ERROR_MESSAGE_INVALID_DIGEST_ALGORITHM,
+            ERROR_CODE_INVALID_DIGEST_ALGORITHM
+        )
+    }
+    return digestAlgorithm
+}
 
 class MsoMdocVerifiableCredential(
     private val options: MsoMdocVerificationOptions = MsoMdocVerificationOptions(),
@@ -165,7 +185,7 @@ class MsoMdocVerifiableCredential(
         }
         val decodedCredential = cbors[0] as Map
         val (issuerAuth, issuerSignedNamespaces, isLatest) = getIssuerSignedData(decodedCredential)
-        validateMsoPayload(issuerAuth, isLatest)
+        validateMsoPayload(issuerAuth)
         val mso = issuerAuth.extractMso()
         val docType = mso.get(UnicodeString(DOC_TYPE))
         val encodedNameSpaceItems = if (!captureRawNameSpaces) emptyMap() else try {
@@ -230,11 +250,12 @@ class MsoMdocVerifiableCredential(
         throw RuntimeException("Invalid issuerSigned structure in mDoc")
     }
 
-    private fun validateMsoPayload(issuerAuth: Array, isLatest: Boolean) {
+    /** ISO 18013-5 §9.1.2.4: the payload is #6.24(bstr .cbor MobileSecurityObject) for every shape. */
+    private fun validateMsoPayload(issuerAuth: Array) {
         try {
             val payload = CborDecoder.decode((issuerAuth[2] as ByteString).bytes)[0]
-            if (isLatest && (payload.majorType != MajorType.BYTE_STRING || payload.tag != Tag(24))) {
-                throw ValidationException("mso is not tagged", ERROR_CODE_INVALID_MSO)
+            if (payload.majorType != MajorType.BYTE_STRING || payload.tag != Tag(TAG_ENCODED_CBOR)) {
+                throw ValidationException(ERROR_MESSAGE_MSO_NOT_TAGGED, ERROR_CODE_INVALID_MSO)
             }
 
         } catch (exception: ValidationException) {

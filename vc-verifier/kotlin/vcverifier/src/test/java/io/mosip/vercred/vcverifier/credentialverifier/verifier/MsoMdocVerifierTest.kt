@@ -10,6 +10,7 @@ import co.nstant.`in`.cbor.model.Map as CborMap
 import co.nstant.`in`.cbor.model.UnicodeString
 import io.mockk.clearAllMocks
 import io.mockk.every
+import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.DecodedIssuerSignedItem
 import io.mockk.mockkObject
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.MsoMdocVerifiableCredential
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_ALG
@@ -46,6 +47,12 @@ import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_MSO_ALG
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_MISSING_ALG
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_SIGNED_OUTSIDE_DS_CERT
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_DS_CERT_KEY_FOR_ALG
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_MALFORMED_PROTECTED_HEADER
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_MISSING_DIGEST_ID
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_MSO_NOT_TAGGED
+import co.nstant.`in`.cbor.model.DataItem
+import java.security.MessageDigest
 import testutils.MsoMdocTestCredentialFactory
 import java.math.BigInteger
 import io.mosip.vercred.vcverifier.exception.InvalidPropertyException
@@ -88,7 +95,10 @@ class MsoMdocVerifierTest {
     }
 
     @Test
-    @Disabled("Requires ISO-conformant DS certificates from inji-certify#1123 (mDL EKU 1.0.18013.5.1.2)")
+    @Disabled(
+        "Needs a fresh Certify sample issued after inji-certify#1123 whose DS certificate has the " +
+            "mDL EKU 1.0.18013.5.1.2 (inji-certify#1132)"
+    )
     fun `should return true when credential is successfully verified`() {
         val inputs =
             listOf(
@@ -115,15 +125,15 @@ class MsoMdocVerifierTest {
     }
 
     @Test
-    @Disabled("Requires ISO-conformant DS certificates from inji-certify#1123")
-    fun `should return true when legacy issuerSigned mDoc mso payload is not tagged with 24`() {
-        // Legacy docType/issuerSigned credentials are exempt from the tag-24 requirement,
-        // which only applies to the latest OpenID4VCI 1.0 structure.
-        val isVerified = MsoMdocVerifier().verify(
-            "omdkb2NUeXBldW9yZy5pc28uMTgwMTMuNS4xLm1ETGxpc3N1ZXJTaWduZWSiamlzc3VlckF1dGiEQ6EBJqEYIVkDFDCCAxAwggH4oAMCAQICCFQD_uck0G08MA0GCSqGSIb3DQEBCwUAMHgxCzAJBgNVBAYTAklOMQswCQYDVQQIDAJLQTESMBAGA1UEBwwJQkFOR0FMT1JFMQ4wDAYDVQQKDAVJSUlUQjEXMBUGA1UECwwORVhBTVBMRS1DRU5URVIxHzAdBgNVBAMMFnd3dy5leGFtcGxlLmNvbSAoUk9PVCkwHhcNMjYwMTE5MTM1MDQ2WhcNMjkwMTE4MTM1MDQ2WjCBmzELMAkGA1UEBhMCSU4xCzAJBgNVBAgMAktBMRIwEAYDVQQHDAlCQU5HQUxPUkUxDjAMBgNVBAoMBUlJSVRCMRcwFQYDVQQLDA5FWEFNUExFLUNFTlRFUjFCMEAGA1UEAww5d3d3LmV4YW1wbGUuY29tIChDRVJUSUZZX1ZDX1NJR05fRUNfUjEtRUNfU0VDUDI1NlIxX1NJR04pMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE3Y_vIMN8LpOXj7ldttDl2PQf39EvIRAhOXFyvnFwctdU9rxY31WHRsJdMGJQRuc4wLPz6Ii3eHdSLQph8226W6NFMEMwEgYDVR0TAQH_BAgwBgEB_wIBATAdBgNVHQ4EFgQUE8etKEgc7LmfW_WgkcB6Dtc-O9owDgYDVR0PAQH_BAQDAgKEMA0GCSqGSIb3DQEBCwUAA4IBAQBUp2oWwpcpCNYd_GgORojXV1L7cYO0YVG-bmvfGt5QqmXZzmHd79tTJF4PAzTRgz_zPyMU9UBaVzCyi3sj8C9mFnB0hXDkbk3dw7ZVxHp7LFpxjl99peaKfcz39Dczk4LoCn7ZwuS-qhc8gsDFzxX42dgXp1BZUzzj17Syzs8lpDAXxieaj0hjfr7neq07pODyDMAZ3wy7SVPJOhuGHRada3UFgS3uOJH6zhOTGn-IbTvYZ-tkzkgKh6xcG_PBipBh5vIciSvcfvHyZ2UANVY_kseRTsuiZv0KXvgISOv3bvqqQyCDy_FD-_yuqdyT9YPuj_Cr2UWCn_aoZmJoru3qWQIWpmdkb2NUeXBldW9yZy5pc28uMTgwMTMuNS4xLm1ETGd2ZXJzaW9uYzEuMGx2YWxpZGl0eUluZm-iaXZhbGlkRnJvbXgYMjAyNi0wNy0xNVQwNjo0OToyMi45MDNaanZhbGlkVW50aWx4GDIwMjgtMDctMTVUMDY6NDk6MjIuOTA0Wmx2YWx1ZURpZ2VzdHOhcW9yZy5pc28uMTgwMTMuNS4xpwBYIHrRv_fnGSHyqGeIW2I-NbZFiJ06NCIH_3iceOkWCVG1AVgg4UkMtcuCtQf-F0750zy2UWAXSW4GBXlC9d1-gantrT8CWCC4JSaKgrcH_RXdlK4d3ZuSL9_ECtTQ_0R8ltUD_cvaYQNYILwBk-WC4x9dwH12ZVQ66b-42xBXrM2rSRr79q9IM6ygBFgg2U-S07CL6bxsotMyZfffhj-d-XbuxBhDtwS51ZWC0zYFWCCZsZufSbOAF1NIpEhA279eU_mOkFEBWoePusO1zkH56gZYIPGxEvjbKhkxEUsppn__AxNop-R8mDs_Y1AKx3HhliqIbWRldmljZUtleUluZm-haWRldmljZUtleaUBAgMmIAEhWCDaxP3aXFAikFmWuBrO91Tj7K2xcxaNLHQPW2ufIZ9qqSJYIPsTdw-BdyzlpXDPfZdyp9yp8VrbHe8MTuXviiX4bjYWb2RpZ2VzdEFsZ29yaXRobWdTSEEtMjU2WECfJH_Dh71RiMaceuM5Xm98NLLdhPQo635ZRRiqXXM6oUFzDqkGo94famCO8jegdtWuhLaqanUJJMz7xGd_5GUEam5hbWVTcGFjZXOhcW9yZy5pc28uMTgwMTMuNS4xh9gYWF2kZnJhbmRvbVgYyA4LdT-w3uprgtB_lMM-hBWpjZ3VzW1CaGRpZ2VzdElEAGxlbGVtZW50VmFsdWVlVXNlcjFxZWxlbWVudElkZW50aWZpZXJrZmFtaWx5X25hbWXYGFhcpGZyYW5kb21YGL6jSd2nyx2np8RZVZwRwfNKBHeyGtyl62hkaWdlc3RJRAFsZWxlbWVudFZhbHVlZVRlc3QxcWVsZW1lbnRJZGVudGlmaWVyamdpdmVuX25hbWXYGFhkpGZyYW5kb21YGG1meiknZB0H24gJ1MjCRZq3pGkzdhg8l2hkaWdlc3RJRAJsZWxlbWVudFZhbHVl2QPsajE5OTMtMDQtMTVxZWxlbWVudElkZW50aWZpZXJqYmlydGhfZGF0ZdgYWF6kZnJhbmRvbVgYDUTmWgzbQFH5GoHEue0GWV7sKwcacpaPaGRpZ2VzdElEA2xlbGVtZW50VmFsdWViSU5xZWxlbWVudElkZW50aWZpZXJvaXNzdWluZ19jb3VudHJ52BhYaKRmcmFuZG9tWBh1Sc7RYZ2utrPfz86QhMlqVQkj-CA_O8toZGlnZXN0SUQEbGVsZW1lbnRWYWx1ZWxETDIwNDIzNTEzMDdxZWxlbWVudElkZW50aWZpZXJvZG9jdW1lbnRfbnVtYmVy2BhY4KRmcmFuZG9tWBjqUT9vI8EfIFIRl8s4biqPCGxJKFiJsEdoZGlnZXN0SUQFbGVsZW1lbnRWYWx1ZXiKZGF0YTppbWFnZS9wbmc7YmFzZTY0LGlWQk9SdzBLR2dvQUFBQU5TVWhFVWdBQUFCd0FBQUFGQ0FZQUFBQlcxSXpIQUFBQUhrbEVRVlFva1dOZ0dQYUFrWkh4UHlNajQzOXNZclNRbzUxUEJnc0FBTGEwRUNGMzBKU2RBQUFBQUVsRlRrU3VRbUNDcWVsZW1lbnRJZGVudGlmaWVyaHBvcnRyYWl02BhYjqRmcmFuZG9tWBi5MVz5iRw3KK8SXGKGcp_DUH4VKu-lf8RoZGlnZXN0SUQGbGVsZW1lbnRWYWx1ZYGiaWlzc3VlRGF0ZdkD7GoyMDIzLTAxLTE1c3ZlaGljbGVDYXRlZ29yeUNvZGVhQnFlbGVtZW50SWRlbnRpZmllcnJkcml2aW5nX3ByaXZpbGVnZXM"
-        )
-
-        assertTrue(isVerified)
+    fun `should reject legacy issuerSigned mDoc whose mso payload is not tagged with 24`() {
+        // ISO 18013-5 §9.1.2.4: the MSO is #6.24(bstr) for every shape, including shape B.
+        val exception = assertThrows(ValidationException::class.java) {
+            MsoMdocVerifier().verify(
+        "omdkb2NUeXBldW9yZy5pc28uMTgwMTMuNS4xLm1ETGxpc3N1ZXJTaWduZWSiamlzc3VlckF1dGiEQ6EBJqEYIVkDFDCCAxAwggH4oAMCAQICCFQD_uck0G08MA0GCSqGSIb3DQEBCwUAMHgxCzAJBgNVBAYTAklOMQswCQYDVQQIDAJLQTESMBAGA1UEBwwJQkFOR0FMT1JFMQ4wDAYDVQQKDAVJSUlUQjEXMBUGA1UECwwORVhBTVBMRS1DRU5URVIxHzAdBgNVBAMMFnd3dy5leGFtcGxlLmNvbSAoUk9PVCkwHhcNMjYwMTE5MTM1MDQ2WhcNMjkwMTE4MTM1MDQ2WjCBmzELMAkGA1UEBhMCSU4xCzAJBgNVBAgMAktBMRIwEAYDVQQHDAlCQU5HQUxPUkUxDjAMBgNVBAoMBUlJSVRCMRcwFQYDVQQLDA5FWEFNUExFLUNFTlRFUjFCMEAGA1UEAww5d3d3LmV4YW1wbGUuY29tIChDRVJUSUZZX1ZDX1NJR05fRUNfUjEtRUNfU0VDUDI1NlIxX1NJR04pMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE3Y_vIMN8LpOXj7ldttDl2PQf39EvIRAhOXFyvnFwctdU9rxY31WHRsJdMGJQRuc4wLPz6Ii3eHdSLQph8226W6NFMEMwEgYDVR0TAQH_BAgwBgEB_wIBATAdBgNVHQ4EFgQUE8etKEgc7LmfW_WgkcB6Dtc-O9owDgYDVR0PAQH_BAQDAgKEMA0GCSqGSIb3DQEBCwUAA4IBAQBUp2oWwpcpCNYd_GgORojXV1L7cYO0YVG-bmvfGt5QqmXZzmHd79tTJF4PAzTRgz_zPyMU9UBaVzCyi3sj8C9mFnB0hXDkbk3dw7ZVxHp7LFpxjl99peaKfcz39Dczk4LoCn7ZwuS-qhc8gsDFzxX42dgXp1BZUzzj17Syzs8lpDAXxieaj0hjfr7neq07pODyDMAZ3wy7SVPJOhuGHRada3UFgS3uOJH6zhOTGn-IbTvYZ-tkzkgKh6xcG_PBipBh5vIciSvcfvHyZ2UANVY_kseRTsuiZv0KXvgISOv3bvqqQyCDy_FD-_yuqdyT9YPuj_Cr2UWCn_aoZmJoru3qWQIWpmdkb2NUeXBldW9yZy5pc28uMTgwMTMuNS4xLm1ETGd2ZXJzaW9uYzEuMGx2YWxpZGl0eUluZm-iaXZhbGlkRnJvbXgYMjAyNi0wNy0xNVQwNjo0OToyMi45MDNaanZhbGlkVW50aWx4GDIwMjgtMDctMTVUMDY6NDk6MjIuOTA0Wmx2YWx1ZURpZ2VzdHOhcW9yZy5pc28uMTgwMTMuNS4xpwBYIHrRv_fnGSHyqGeIW2I-NbZFiJ06NCIH_3iceOkWCVG1AVgg4UkMtcuCtQf-F0750zy2UWAXSW4GBXlC9d1-gantrT8CWCC4JSaKgrcH_RXdlK4d3ZuSL9_ECtTQ_0R8ltUD_cvaYQNYILwBk-WC4x9dwH12ZVQ66b-42xBXrM2rSRr79q9IM6ygBFgg2U-S07CL6bxsotMyZfffhj-d-XbuxBhDtwS51ZWC0zYFWCCZsZufSbOAF1NIpEhA279eU_mOkFEBWoePusO1zkH56gZYIPGxEvjbKhkxEUsppn__AxNop-R8mDs_Y1AKx3HhliqIbWRldmljZUtleUluZm-haWRldmljZUtleaUBAgMmIAEhWCDaxP3aXFAikFmWuBrO91Tj7K2xcxaNLHQPW2ufIZ9qqSJYIPsTdw-BdyzlpXDPfZdyp9yp8VrbHe8MTuXviiX4bjYWb2RpZ2VzdEFsZ29yaXRobWdTSEEtMjU2WECfJH_Dh71RiMaceuM5Xm98NLLdhPQo635ZRRiqXXM6oUFzDqkGo94famCO8jegdtWuhLaqanUJJMz7xGd_5GUEam5hbWVTcGFjZXOhcW9yZy5pc28uMTgwMTMuNS4xh9gYWF2kZnJhbmRvbVgYyA4LdT-w3uprgtB_lMM-hBWpjZ3VzW1CaGRpZ2VzdElEAGxlbGVtZW50VmFsdWVlVXNlcjFxZWxlbWVudElkZW50aWZpZXJrZmFtaWx5X25hbWXYGFhcpGZyYW5kb21YGL6jSd2nyx2np8RZVZwRwfNKBHeyGtyl62hkaWdlc3RJRAFsZWxlbWVudFZhbHVlZVRlc3QxcWVsZW1lbnRJZGVudGlmaWVyamdpdmVuX25hbWXYGFhkpGZyYW5kb21YGG1meiknZB0H24gJ1MjCRZq3pGkzdhg8l2hkaWdlc3RJRAJsZWxlbWVudFZhbHVl2QPsajE5OTMtMDQtMTVxZWxlbWVudElkZW50aWZpZXJqYmlydGhfZGF0ZdgYWF6kZnJhbmRvbVgYDUTmWgzbQFH5GoHEue0GWV7sKwcacpaPaGRpZ2VzdElEA2xlbGVtZW50VmFsdWViSU5xZWxlbWVudElkZW50aWZpZXJvaXNzdWluZ19jb3VudHJ52BhYaKRmcmFuZG9tWBh1Sc7RYZ2utrPfz86QhMlqVQkj-CA_O8toZGlnZXN0SUQEbGVsZW1lbnRWYWx1ZWxETDIwNDIzNTEzMDdxZWxlbWVudElkZW50aWZpZXJvZG9jdW1lbnRfbnVtYmVy2BhY4KRmcmFuZG9tWBjqUT9vI8EfIFIRl8s4biqPCGxJKFiJsEdoZGlnZXN0SUQFbGVsZW1lbnRWYWx1ZXiKZGF0YTppbWFnZS9wbmc7YmFzZTY0LGlWQk9SdzBLR2dvQUFBQU5TVWhFVWdBQUFCd0FBQUFGQ0FZQUFBQlcxSXpIQUFBQUhrbEVRVlFva1dOZ0dQYUFrWkh4UHlNajQzOXNZclNRbzUxUEJnc0FBTGEwRUNGMzBKU2RBQUFBQUVsRlRrU3VRbUNDcWVsZW1lbnRJZGVudGlmaWVyaHBvcnRyYWl02BhYjqRmcmFuZG9tWBi5MVz5iRw3KK8SXGKGcp_DUH4VKu-lf8RoZGlnZXN0SUQGbGVsZW1lbnRWYWx1ZYGiaWlzc3VlRGF0ZdkD7GoyMDIzLTAxLTE1c3ZlaGljbGVDYXRlZ29yeUNvZGVhQnFlbGVtZW50SWRlbnRpZmllcnJkcml2aW5nX3ByaXZpbGVnZXM"
+            )
+        }
+        assertEquals(ERROR_CODE_INVALID_MSO, exception.errorCode)
+        assertEquals(ERROR_MESSAGE_MSO_NOT_TAGGED, exception.errorMessage)
     }
 
     @Test
@@ -450,7 +460,8 @@ class MsoMdocVerifierTest {
     }
 
     @Test
-    fun `should accept protected header alg ES384 and ES512`() {
+    fun `should reject protected header alg ES384 and ES512`() {
+        // ES256 only; ES384/ES512/EdDSA tracked in #302.
         listOf(-35L, -36L).forEach { alg ->
             val protectedHeaderBytes = ByteArrayOutputStream().also {
                 CborEncoder(it).encode(CborMap().apply {
@@ -466,7 +477,12 @@ class MsoMdocVerifierTest {
             val verifier = MsoMdocVerifier()
             val method = verifier.javaClass.getDeclaredMethod("verifyProtectedHeaderAlg", CborArray::class.java)
             method.isAccessible = true
-            assertDoesNotThrow { method.invoke(verifier, issuerAuth) }
+            val invocationException = assertThrows(InvocationTargetException::class.java) {
+                method.invoke(verifier, issuerAuth)
+            }
+            val validationException = invocationException.targetException as ValidationException
+            assertEquals(ERROR_MESSAGE_INVALID_MSO_ALG, validationException.errorMessage)
+            assertEquals(ERROR_CODE_INVALID_ALG, validationException.errorCode)
         }
     }
 
@@ -500,30 +516,20 @@ class MsoMdocVerifierTest {
 
     @Test
     fun `should throw ERR_INVALID_ISSUE_DATE for impossible calendar date`() {
-        val issuerSignedItem = CborMap().apply {
-            put(UnicodeString("digestID"), UnsignedInteger(1))
-            put(UnicodeString("random"), ByteString(ByteArray(16)))
-            put(UnicodeString("elementIdentifier"), UnicodeString("issue_date"))
-            put(UnicodeString("elementValue"), UnicodeString("2024-13-45"))
-        }
-        val itemBytes = ByteArrayOutputStream().also { CborEncoder(it).encode(issuerSignedItem) }.toByteArray()
-        val namespaces = CborMap().apply {
-            put(
-                UnicodeString("org.iso.18013.5.1"),
-                CborArray().apply { add(ByteString(itemBytes)) }
-            )
-        }
+        val items = listOf(
+            DecodedIssuerSignedItem("org.iso.18013.5.1", BigInteger.ONE, "issue_date", UnicodeString("2024-13-45"))
+        )
 
         val verifier = MsoMdocVerifier()
         val method = verifier.javaClass.getDeclaredMethod(
             "verifyIssueDate",
             CborMap::class.java,
-            CborMap::class.java
+            List::class.java
         )
         method.isAccessible = true
 
         val invocationException = assertThrows(InvocationTargetException::class.java) {
-            method.invoke(verifier, CborMap(), namespaces)
+            method.invoke(verifier, CborMap(), items)
         }
         val validationException = invocationException.targetException as ValidationException
         assertEquals(ERROR_MESSAGE_INVALID_ISSUE_DATE_FORMAT, validationException.errorMessage)
@@ -532,19 +538,9 @@ class MsoMdocVerifierTest {
 
     @Test
     fun `should throw ERR_INVALID_ISSUE_DATE when issue_date is after validFrom`() {
-        val issuerSignedItem = CborMap().apply {
-            put(UnicodeString("digestID"), UnsignedInteger(1))
-            put(UnicodeString("random"), ByteString(ByteArray(16)))
-            put(UnicodeString("elementIdentifier"), UnicodeString("issue_date"))
-            put(UnicodeString("elementValue"), UnicodeString("2025-01-02"))
-        }
-        val itemBytes = ByteArrayOutputStream().also { CborEncoder(it).encode(issuerSignedItem) }.toByteArray()
-        val namespaces = CborMap().apply {
-            put(
-                UnicodeString("org.iso.18013.5.1"),
-                CborArray().apply { add(ByteString(itemBytes)) }
-            )
-        }
+        val items = listOf(
+            DecodedIssuerSignedItem("org.iso.18013.5.1", BigInteger.ONE, "issue_date", UnicodeString("2025-01-02"))
+        )
         val mso = CborMap().apply {
             put(
                 UnicodeString("validityInfo"),
@@ -558,12 +554,12 @@ class MsoMdocVerifierTest {
         val method = verifier.javaClass.getDeclaredMethod(
             "verifyIssueDate",
             CborMap::class.java,
-            CborMap::class.java
+            List::class.java
         )
         method.isAccessible = true
 
         val invocationException = assertThrows(InvocationTargetException::class.java) {
-            method.invoke(verifier, mso, namespaces)
+            method.invoke(verifier, mso, items)
         }
         val validationException = invocationException.targetException as ValidationException
         assertEquals(ERROR_MESSAGE_INVALID_ISSUE_DATE, validationException.errorMessage)
@@ -1150,11 +1146,11 @@ class MsoMdocVerifierTest {
             val method = verifier.javaClass.getDeclaredMethod(
                 "verifyIssuingJurisdiction",
                 java.security.cert.X509Certificate::class.java,
-                CborMap::class.java
+                List::class.java
             )
             method.isAccessible = true
             val invocationException = assertThrows(InvocationTargetException::class.java) {
-                method.invoke(verifier, certificate, CborMap())
+                method.invoke(verifier, certificate, emptyList<DecodedIssuerSignedItem>())
             }
             val exception = invocationException.targetException as ValidationException
             assertEquals(ERROR_CODE_INVALID_DS_CERT_SUBJECT, exception.errorCode)
@@ -1191,6 +1187,279 @@ class MsoMdocVerifierTest {
                 mso,
             )
             assertTrue(exception is LikelyTamperedException)
+        }
+    }
+
+    private fun encodeItem(item: DataItem): ByteArray =
+        ByteArrayOutputStream().also { CborEncoder(it).encode(item) }.toByteArray()
+
+    private fun tagged(item: DataItem, tag: Long = 24): ByteString =
+        ByteString(encodeItem(item)).apply { setTag(tag) }
+
+    private fun itemWith(
+        digestId: DataItem? = UnsignedInteger(1),
+        random: DataItem? = ByteString(ByteArray(16)),
+        identifier: DataItem? = UnicodeString("family_name"),
+        value: DataItem? = UnicodeString("Doe"),
+    ): CborMap = CborMap().apply {
+        digestId?.let { put(UnicodeString("digestID"), it) }
+        random?.let { put(UnicodeString("random"), it) }
+        identifier?.let { put(UnicodeString("elementIdentifier"), it) }
+        value?.let { put(UnicodeString("elementValue"), it) }
+    }
+
+    /**
+     * Runs verifyValueDigests on one received record whose MSO digest (stored under [msoDigestId])
+     * matches its as-received bytes. Returns the thrown exception, or null when it passes.
+     */
+    private fun runDigestCheck(record: DataItem, msoDigestId: BigInteger = BigInteger.ONE): Throwable? {
+        val encoded = encodeItem(record)
+        val namespace = UnicodeString("org.iso.18013.5.1")
+        val namespaces = CborMap().apply { put(namespace, CborArray().apply { add(record) }) }
+        val mso = CborMap().apply {
+            put(UnicodeString("digestAlgorithm"), UnicodeString("SHA-256"))
+            put(UnicodeString("valueDigests"), CborMap().apply {
+                put(namespace, CborMap().apply {
+                    put(UnsignedInteger(msoDigestId), ByteString(MessageDigest.getInstance("SHA-256").digest(encoded)))
+                })
+            })
+        }
+        val verifier = MsoMdocVerifier()
+        val method = verifier.javaClass.getDeclaredMethod(
+            "verifyValueDigests",
+            CborMap::class.java,
+            Map::class.java,
+            CborMap::class.java
+        )
+        method.isAccessible = true
+        return try {
+            method.invoke(verifier, namespaces, mapOf(namespace.string to listOf(encoded)), mso)
+            null
+        } catch (exception: InvocationTargetException) {
+            exception.targetException
+        }
+    }
+
+    @org.junit.jupiter.api.Nested
+    inner class `S2-3 duplicate digestID` {
+        @Test
+        fun `should reject a forged element sharing a digestID with a genuine one`() {
+            // Forged item first (digestID 0, never digested), genuine family_name (digestID 0) second.
+            val credential = factory.create(
+                forgedItems = listOf(Triple(0L, "nationality", UnicodeString("XX"))),
+            )
+            val exception = assertThrows(ValidationException::class.java) { MsoMdocVerifier().verify(credential) }
+            assertEquals(ERROR_CODE_INVALID_DIGEST_ID, exception.errorCode)
+            assertEquals(ERROR_MESSAGE_INVALID_DIGEST_ID, exception.errorMessage)
+        }
+
+        @Test
+        fun `should accept the same digestID in two different namespaces`() {
+            // The factory numbers digestIDs per namespace, so both namespaces use digestID 0.
+            val credential = factory.create(
+                extraNamespaces = mapOf("org.example.ns" to listOf("extra" to UnicodeString("value"))),
+            )
+            assertTrue(MsoMdocVerifier().verify(credential))
+        }
+    }
+
+    @org.junit.jupiter.api.Nested
+    inner class `S2-4 digestID range` {
+        @org.junit.jupiter.params.ParameterizedTest(name = "digestID {0}")
+        @org.junit.jupiter.params.provider.ValueSource(strings = ["missing", "negative", "text", "2^31"])
+        fun `should reject an invalid digestID`(case: String) {
+            val digestId: DataItem? = when (case) {
+                "missing" -> null
+                "negative" -> NegativeInteger(-1)
+                "text" -> UnicodeString("1")
+                else -> UnsignedInteger(BigInteger.ONE.shiftLeft(31))
+            }
+            val exception = runDigestCheck(tagged(itemWith(digestId = digestId))) as ValidationException
+            assertEquals(ERROR_CODE_INVALID_DIGEST_ID, exception.errorCode)
+            val expectedMessage =
+                if (case == "2^31") ERROR_MESSAGE_DIGEST_ID_OUT_OF_RANGE else ERROR_MESSAGE_MISSING_DIGEST_ID
+            assertEquals(expectedMessage, exception.errorMessage)
+        }
+
+        @Test
+        fun `should accept digestID 2^31 - 1`() {
+            val maxDigestId = BigInteger.ONE.shiftLeft(31).subtract(BigInteger.ONE)
+            assertNull(runDigestCheck(tagged(itemWith(digestId = UnsignedInteger(maxDigestId))), maxDigestId))
+        }
+    }
+
+    @org.junit.jupiter.api.Nested
+    inner class `S2-5 random salt` {
+        @org.junit.jupiter.params.ParameterizedTest(name = "random {0}")
+        @org.junit.jupiter.params.provider.ValueSource(strings = ["missing", "text", "15 bytes"])
+        fun `should reject an invalid random`(case: String) {
+            val random: DataItem? = when (case) {
+                "missing" -> null
+                "text" -> UnicodeString("0123456789abcdef0123")
+                else -> ByteString(ByteArray(15))
+            }
+            val exception = runDigestCheck(tagged(itemWith(random = random))) as ValidationException
+            assertEquals(ERROR_CODE_INVALID_DIGEST_SALT, exception.errorCode)
+        }
+
+        @org.junit.jupiter.params.ParameterizedTest(name = "random of {0} bytes")
+        @org.junit.jupiter.params.provider.ValueSource(ints = [16, 32])
+        fun `should accept a random of at least 16 bytes`(size: Int) {
+            assertNull(runDigestCheck(tagged(itemWith(random = ByteString(ByteArray(size))))))
+        }
+    }
+
+    @org.junit.jupiter.api.Nested
+    inner class `S2-6 alg in the protected header` {
+        @Test
+        fun `should reject ES384 and ES512 through public verify`() {
+            listOf(-35L, -36L).forEach { alg ->
+                assertVerifyFails(ERROR_CODE_INVALID_ALG, MsoMdocVerifier(), factory.create(alg = alg))
+            }
+        }
+
+        @Test
+        fun `should reject a P-384 DS key with an ES256 header`() {
+            val credential = factory.create(certificate = factory.generateP384Certificate())
+            val exception = assertThrows(ValidationException::class.java) { MsoMdocVerifier().verify(credential) }
+            assertEquals(ERROR_CODE_INVALID_ALG, exception.errorCode)
+            assertEquals(ERROR_MESSAGE_INVALID_DS_CERT_KEY_FOR_ALG, exception.errorMessage)
+        }
+
+        @Test
+        fun `should reject alg present only in the unprotected header through public verify`() {
+            val credential = factory.create(algInUnprotectedHeader = true)
+            val exception = assertThrows(ValidationException::class.java) { MsoMdocVerifier().verify(credential) }
+            assertEquals(ERROR_CODE_MISSING_ALG, exception.errorCode)
+            assertEquals(ERROR_MESSAGE_MISSING_ALG, exception.errorMessage)
+        }
+
+        @Test
+        fun `should report a protected header that is not a map as malformed`() {
+            listOf<DataItem>(
+                ByteString(encodeItem(CborArray().apply { add(UnsignedInteger(1)) })),
+                CborMap(),
+            ).forEach { protectedHeader ->
+                val issuerAuth = CborArray().apply {
+                    add(protectedHeader)
+                    add(CborMap())
+                    add(ByteString(ByteArray(0)))
+                    add(ByteString(ByteArray(4)))
+                }
+                val verifier = MsoMdocVerifier()
+                val method = verifier.javaClass.getDeclaredMethod("verifyProtectedHeaderAlg", CborArray::class.java)
+                method.isAccessible = true
+                val invocationException = assertThrows(InvocationTargetException::class.java) {
+                    method.invoke(verifier, issuerAuth)
+                }
+                val exception = invocationException.targetException as ValidationException
+                assertEquals(ERROR_MESSAGE_MALFORMED_PROTECTED_HEADER, exception.errorMessage)
+            }
+        }
+    }
+
+    @org.junit.jupiter.api.Nested
+    inner class `S2-7 MSO tag 24 for every shape` {
+        @Test
+        fun `should reject an untagged MSO in shapes A, B and C`() {
+            Shape.values().forEach { shape ->
+                val exception = assertThrows(ValidationException::class.java, {
+                    MsoMdocVerifier().verify(factory.create(shape = shape, untaggedMso = true))
+                }, "shape $shape")
+                assertEquals(ERROR_CODE_INVALID_MSO, exception.errorCode)
+                assertEquals(ERROR_MESSAGE_MSO_NOT_TAGGED, exception.errorMessage)
+            }
+        }
+    }
+
+    @org.junit.jupiter.api.Nested
+    inner class `S2-9 nameSpaces item contents` {
+        @org.junit.jupiter.params.ParameterizedTest(name = "{0}")
+        @org.junit.jupiter.params.provider.ValueSource(
+            strings = [
+                "untagged byte string",
+                "plain map",
+                "wrong tag 21",
+                "tag 24 wrapping an array",
+                "tag 24 map without elementIdentifier",
+                "tag 24 map with non-text elementIdentifier",
+                "tag 24 map without elementValue",
+            ]
+        )
+        fun `should reject a malformed nameSpaces item`(case: String) {
+            val record: DataItem = when (case) {
+                "untagged byte string" -> ByteString(encodeItem(itemWith()))
+                "plain map" -> itemWith()
+                "wrong tag 21" -> tagged(itemWith(), tag = 21)
+                "tag 24 wrapping an array" -> tagged(CborArray().apply { add(UnicodeString("x")) })
+                "tag 24 map without elementIdentifier" -> tagged(itemWith(identifier = null))
+                "tag 24 map with non-text elementIdentifier" -> tagged(itemWith(identifier = UnsignedInteger(5)))
+                else -> tagged(itemWith(value = null))
+            }
+            val exception = runDigestCheck(record) as ValidationException
+            assertEquals(ERROR_CODE_INVALID_ISSUER_SIGNED_ITEM, exception.errorCode)
+        }
+    }
+
+    @org.junit.jupiter.api.Nested
+    inner class `S2-12 issue_date` {
+        private val now = Instant.parse("2026-06-15T12:00:00Z")
+        private val validFrom = Instant.parse("2026-06-15T11:59:00Z")
+
+        private fun credentialWithIssueDate(value: DataItem, docType: String = "org.iso.18013.5.1.mDL") =
+            factory.create(
+                now = now,
+                signed = validFrom.minusSeconds(60),
+                validFrom = validFrom,
+                msoDocType = docType,
+                topLevelDocType = docType,
+                records = factory.recordsWith("issue_date", value, validFrom),
+            )
+
+        private fun tdate(value: String) = UnicodeString(value).apply { setTag(0) }
+
+        @Test
+        fun `should pass when issue_date is the same day as validFrom`() {
+            assertTrue(verifierAt(now).verify(credentialWithIssueDate(UnicodeString("2026-06-15"))))
+        }
+
+        @Test
+        fun `should pass when issue_date is the day before validFrom`() {
+            assertTrue(verifierAt(now).verify(credentialWithIssueDate(UnicodeString("2026-06-14"))))
+        }
+
+        @Test
+        fun `should skip the check when issue_date is not disclosed`() {
+            assertTrue(MsoMdocVerifier().verify(factory.create(discloseOnly = allMandatoryExcept("issue_date"))))
+        }
+
+        @Test
+        fun `should accept a tdate issue_date by its UTC date`() {
+            assertTrue(verifierAt(now).verify(credentialWithIssueDate(tdate("2026-06-15T00:00:00Z"))))
+        }
+
+        @Test
+        fun `should fail a tdate issue_date after validFrom`() {
+            assertVerifyFails(
+                ERROR_CODE_INVALID_ISSUE_DATE,
+                verifierAt(now),
+                credentialWithIssueDate(tdate("2026-06-16T00:00:00Z")),
+            )
+        }
+
+        @Test
+        fun `should fail an invalid tdate issue_date`() {
+            assertVerifyFails(
+                ERROR_CODE_INVALID_ISSUE_DATE,
+                verifierAt(now),
+                credentialWithIssueDate(tdate("2026-06-15T25:00:00Z")),
+            )
+        }
+
+        @Test
+        fun `should skip the check for a non-mDL docType`() {
+            val credential = credentialWithIssueDate(UnicodeString("2026-06-20"), docType = "org.example.doc")
+            assertTrue(verifierAt(now).verify(credential))
         }
     }
 }

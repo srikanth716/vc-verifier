@@ -102,9 +102,9 @@ refer to the implementation classes for complete rules.
     * **B (legacy):** `{ docType, issuerSigned: { issuerAuth, nameSpaces } }`
     * **C (legacy):** `{ documents: [ { docType, issuerSigned } ] }` (uses `documents[0]`)
 * **MSO structure:**
-    * `version` must be `"1.0"`
+    * `version` must be `1.<minor>` (e.g. `"1.0"`, `"1.1"`)
     * `digestAlgorithm` must be `SHA-256`, `SHA-384`, or `SHA-512`
-    * Shape A: MSO payload must be wrapped in CBOR tag 24
+    * MSO payload must be wrapped in CBOR tag 24 (all shapes)
 * **Validates the `validityInfo` block:**
     * Dates must have no fractional seconds and end in `Z`
     * `validFrom` should not be in the future (3s skew)
@@ -954,7 +954,7 @@ For other unknown exceptions, error code will be `ERR_GENERIC`
 | duplicate digestID                    | ERR_INVALID_DIGEST_ID           |
 | nameSpaces record not tag-24          | ERR_INVALID_ISSUER_SIGNED_ITEM  |
 | COSE protected `alg` missing          | ERR_MISSING_ALG                 |
-| COSE protected `alg` not ES256/384/512 | ERR_INVALID_ALG                |
+| COSE protected `alg` not ES256 / DS key not P-256 | ERR_INVALID_ALG     |
 | digestID ≥ 2^31 or missing            | ERR_INVALID_DIGEST_ID           |
 | salt (`random`) &lt; 16 bytes           | ERR_INVALID_DIGEST_SALT         |
 | mDL field type/structure/mandatory/age | ERR_INVALID_MDL_ELEMENT        |

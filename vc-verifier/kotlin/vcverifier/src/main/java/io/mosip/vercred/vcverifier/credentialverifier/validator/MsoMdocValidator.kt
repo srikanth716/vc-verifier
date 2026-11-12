@@ -7,7 +7,6 @@ import co.nstant.`in`.cbor.model.UnicodeString
 import co.nstant.`in`.cbor.model.UnsignedInteger
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_CURRENT_DATE_BEFORE_VALID_FROM
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_DATE_MSO
-import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_DIGEST_ALGORITHM
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_MSO
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_MSO_DATE_FORMAT
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_MSO_VERSION
@@ -18,8 +17,9 @@ import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_VC_EXPIRED
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CURRENT_DATE_BEFORE_VALID_FROM
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_DATE_MSO
-import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_DIGEST_ALGORITHM
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_EXPECTED_UPDATE_MSO
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_MSO_DIGEST_ID
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_VALID_FROM_BEFORE_SIGNED_MSO
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_MSO_DATE_FORMAT
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_MSO_VERSION
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_SIGNED_MSO
@@ -30,13 +30,16 @@ import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.VALID_FROM
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.VALID_UNTIL
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.DIGEST_ALGORITHM
+import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.DIGEST_ID_MAX_EXCLUSIVE
+import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.MSO_VERSION_PATTERN
+import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.VERSION
+import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.requireSupportedDigestAlgorithm
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.DOC_TYPE
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.EXPECTED_UPDATE
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.MdocClock
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.MsoMdocVerifiableCredential
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.MsoMdocVerificationOptions
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.SIGNED
-import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.SUPPORTED_DIGEST_ALGORITHMS
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.VALIDITY_INFO
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.VALUE_DIGESTS
 import io.mosip.vercred.vcverifier.exception.UnknownException
@@ -56,13 +59,15 @@ class MsoMdocValidator(
 
     fun validate(credential: String): Boolean {
         try {
-            val (_, credentialData, isLatest) = MsoMdocVerifiableCredential(options)
+            // The credential shape (A/B/C) only decides where IssuerSigned is found;
+            // every MSO check below applies to all shapes.
+            val (_, credentialData, _) = MsoMdocVerifiableCredential(options)
                 .parse(credential, captureRawNameSpaces = false)
 
             val mso = credentialData.mso
 
             validateMsoStructure(mso)
-            validateValidityInfo(mso, isLatest)
+            validateValidityInfo(mso)
             return true
         } catch (exception: Exception) {
             if (exception is ValidationException) throw exception
@@ -72,7 +77,7 @@ class MsoMdocValidator(
 
     private fun validateMsoStructure(mso: Map) {
         val mandatoryFields = listOf(
-            "version",
+            VERSION,
             DIGEST_ALGORITHM,
             VALUE_DIGESTS,
             "deviceKeyInfo",
@@ -97,9 +102,8 @@ class MsoMdocValidator(
             )
         }
 
-        val version = (mso.getOrNull("version") as? UnicodeString)?.string
-        val major = version?.substringBefore('.')?.toIntOrNull()
-        if (major != 1) {
+        val version = (mso.getOrNull(VERSION) as? UnicodeString)?.string
+        if (version == null || !MSO_VERSION_PATTERN.matches(version)) {
             logger.severe("MSO version major must be 1, found: $version")
             throw ValidationException(
                 ERROR_MESSAGE_INVALID_MSO_VERSION,
@@ -107,14 +111,7 @@ class MsoMdocValidator(
             )
         }
 
-        val digestAlgorithm = mso.getOrNull(DIGEST_ALGORITHM)?.toString()
-        if (digestAlgorithm !in SUPPORTED_DIGEST_ALGORITHMS) {
-            logger.severe("Unsupported digestAlgorithm in MSO: $digestAlgorithm")
-            throw ValidationException(
-                ERROR_MESSAGE_INVALID_DIGEST_ALGORITHM,
-                ERROR_CODE_INVALID_DIGEST_ALGORITHM
-            )
-        }
+        requireSupportedDigestAlgorithm(mso)
 
         validateValueDigestsLayout(mso.getOrNull(VALUE_DIGESTS))
     }
@@ -139,9 +136,17 @@ class MsoMdocValidator(
                 ERROR_CODE_INVALID_MSO
             )
         }
+        // Layout is valid here, so every key is a uint inside a map.
+        val digestIdInRange = (valueDigests as Map).values.all { digestIds ->
+            (digestIds as Map).keys.all { (it as UnsignedInteger).value < DIGEST_ID_MAX_EXCLUSIVE }
+        }
+        if (!digestIdInRange) {
+            logger.severe("valueDigests in the credential's MSO has a digestID of 2^31 or above")
+            throw ValidationException(ERROR_MESSAGE_INVALID_MSO_DIGEST_ID, ERROR_CODE_INVALID_MSO)
+        }
     }
 
-    private fun validateValidityInfo(mso: Map, isLatest: Boolean) {
+    private fun validateValidityInfo(mso: Map) {
         /**
         a) The elements in the ValidityInfo structure are verified against the current time stamp
          */
@@ -168,7 +173,7 @@ class MsoMdocValidator(
             VALID_FROM,
             ERROR_MESSAGE_INVALID_VALID_FROM_MSO,
             ERROR_CODE_INVALID_VALID_FROM_MSO,
-            isLatest,
+            validateTag = true,
         )
 
         requireValidDate(
@@ -176,14 +181,14 @@ class MsoMdocValidator(
             VALID_UNTIL,
             ERROR_MESSAGE_INVALID_VALID_UNTIL_MSO,
             ERROR_CODE_INVALID_VALID_UNTIL_MSO,
-            isLatest,
+            validateTag = true,
         )
         requireValidDate(
             signed,
             SIGNED,
             ERROR_MESSAGE_INVALID_SIGNED_MSO,
             ERROR_CODE_INVALID_VALIDITY_INFO_MSO,
-            isLatest,
+            validateTag = true,
         )
         if (expectedUpdate != null) {
             requireValidDate(
@@ -225,7 +230,7 @@ class MsoMdocValidator(
         if (validFromMillis < signedMillis) {
             logger.severe("Error while doing validity verification - validFrom must not be before signed in the MSO of the credential")
             throw ValidationException(
-                ERROR_MESSAGE_INVALID_VALID_FROM_MSO,
+                ERROR_MESSAGE_VALID_FROM_BEFORE_SIGNED_MSO,
                 ERROR_CODE_INVALID_VALID_FROM_MSO
             )
         }

@@ -48,6 +48,8 @@ import org.junit.jupiter.params.provider.CsvSource
 import org.junit.jupiter.params.provider.ValueSource
 import co.nstant.`in`.cbor.model.UnsignedInteger
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_VALUE_DIGESTS_STRUCTURE
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_MSO_DIGEST_ID
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_VALID_FROM_BEFORE_SIGNED_MSO
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.MDOC_CLOCK_SKEW_TOLERANCE_MS
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.MsoMdocVerificationOptions
 import java.io.ByteArrayOutputStream
@@ -153,6 +155,35 @@ private fun buildLegacyMdocCredential(mso: Map): String {
         )
     }
     return Base64.getUrlEncoder().withoutPadding().encodeToString(encode(credential))
+}
+
+/** Builds a shape C (documents[]) credential wrapping the given MSO. */
+private fun buildDocumentsMdocCredential(mso: Map): String {
+    val issuerAuth = Array().apply {
+        add(ByteString(ByteArray(0)))
+        add(Map())
+        add(ByteString(encode(ByteString(encode(mso)).apply { setTag(MSO_TAG24) })))
+        add(ByteString(ByteArray(4)))
+    }
+    val document = Map().apply {
+        put(UnicodeString("docType"), UnicodeString("org.iso.18013.5.1.mDL"))
+        put(
+            UnicodeString("issuerSigned"),
+            Map().apply {
+                put(UnicodeString("issuerAuth"), issuerAuth)
+                put(UnicodeString("nameSpaces"), Map())
+            }
+        )
+    }
+    val credential = Map().apply { put(UnicodeString("documents"), Array().apply { add(document) }) }
+    return Base64.getUrlEncoder().withoutPadding().encodeToString(encode(credential))
+}
+
+/** Shape A = latest IssuerSigned, B = docType + issuerSigned, C = documents[]. */
+private fun buildCredential(shape: String, mso: Map): String = when (shape) {
+    "A" -> buildMdocCredential(mso)
+    "B" -> buildLegacyMdocCredential(mso)
+    else -> buildDocumentsMdocCredential(mso)
 }
 
 class MsoMdocValidatorTest {
@@ -422,30 +453,32 @@ class MsoMdocValidatorTest {
             assertEquals(ERROR_CODE_INVALID_DATE_MSO, verificationException.errorCode)
         }
 
-        @Test
-        fun `should throw exception when validFrom is before signed in the latest MSO structure`() {
+        @ParameterizedTest(name = "shape {0}")
+        @ValueSource(strings = ["A", "B", "C"])
+        fun `should throw exception when validFrom is before signed`(shape: String) {
             every { DateUtils.parseDate("2024-10-23T07:01:17Z") } returns Date(1729666877000L)
             every { DateUtils.parseDate("2025-10-23T07:01:17Z") } returns Date(1761202877000L)
             every { DateUtils.parseDate("2026-10-23T07:01:17Z") } returns Date(1792738877000L)
 
-            // validFrom (2024) predates signed (2025) - only checked for the latest structure
+            // validFrom (2024) predates signed (2025) - checked for every shape
             val mso = buildMso(
                 validFrom = taggedDate("2024-10-23T07:01:17Z"),
                 validUntil = taggedDate("2026-10-23T07:01:17Z"),
                 signed = taggedDate("2025-10-23T07:01:17Z")
             )
-            val credential = buildMdocCredential(mso)
+            val credential = buildCredential(shape, mso)
 
             val verificationException = assertThrows(ValidationException::class.java) {
                 validatorAt("2026-01-01T00:00:00Z").validate(credential)
             }
 
-            assertEquals(ERROR_MESSAGE_INVALID_VALID_FROM_MSO, verificationException.errorMessage)
+            assertEquals(ERROR_MESSAGE_VALID_FROM_BEFORE_SIGNED_MSO, verificationException.errorMessage)
             assertEquals(ERROR_CODE_INVALID_VALID_FROM_MSO, verificationException.errorCode)
         }
 
-        @Test
-        fun `should return true when validFrom equals signed in the latest MSO structure`() {
+        @ParameterizedTest(name = "shape {0}")
+        @ValueSource(strings = ["A", "B", "C"])
+        fun `should return true when validFrom equals signed`(shape: String) {
             every { DateUtils.parseDate("2024-10-23T07:01:17Z") } returns Date(1729666877000L)
             every { DateUtils.parseDate("2026-10-23T07:01:17Z") } returns Date(1792738877000L)
 
@@ -455,7 +488,7 @@ class MsoMdocValidatorTest {
                 validUntil = taggedDate("2026-10-23T07:01:17Z"),
                 signed = taggedDate("2024-10-23T07:01:17Z")
             )
-            val credential = buildMdocCredential(mso)
+            val credential = buildCredential(shape, mso)
 
             val isVerified = validatorAt(IN_WINDOW).validate(credential)
 
@@ -483,16 +516,22 @@ class MsoMdocValidatorTest {
             assertEquals(ERROR_CODE_CURRENT_DATE_BEFORE_VALID_FROM, verificationException.errorCode)
         }
 
-        @Test
-        fun `should throw when version major is not 1`() {
+        @ParameterizedTest(name = "version {0} is accepted")
+        @ValueSource(strings = ["1.0", "1.1"])
+        fun `should accept MSO version with major 1`(version: String) {
+            val mso = buildMso().apply { put(UnicodeString("version"), UnicodeString(version)) }
+            assertTrue(validatorAt(IN_WINDOW).validate(buildMdocCredential(mso)))
+        }
 
-            val mso = buildMso().apply {
-                put(UnicodeString("version"), UnicodeString("2.0"))
-            }
-            val credential = buildMdocCredential(mso)
+        @ParameterizedTest(name = "version {0} is rejected")
+        @ValueSource(strings = ["2.0", "0.9", "1", "01.0", "1.abc", "1.0.0", "number"])
+        fun `should reject MSO version that is not major 1 dot minor`(version: String) {
+            val versionItem: DataItem =
+                if (version == "number") UnsignedInteger(1) else UnicodeString(version)
+            val mso = buildMso().apply { put(UnicodeString("version"), versionItem) }
 
             val verificationException = assertThrows(ValidationException::class.java) {
-                validatorAt(IN_WINDOW).validate(credential)
+                validatorAt(IN_WINDOW).validate(buildMdocCredential(mso))
             }
 
             assertEquals(ERROR_MESSAGE_INVALID_MSO_VERSION, verificationException.errorMessage)
@@ -500,30 +539,80 @@ class MsoMdocValidatorTest {
         }
 
         @Test
-        fun `should accept version 1_1 as major version 1`() {
-
-            val mso = buildMso().apply {
-                put(UnicodeString("version"), UnicodeString("1.1"))
+        fun `should reject a missing MSO version`() {
+            val mso = buildMso().apply { remove(UnicodeString("version")) }
+            val verificationException = assertThrows(ValidationException::class.java) {
+                validatorAt(IN_WINDOW).validate(buildMdocCredential(mso))
             }
-            val credential = buildMdocCredential(mso)
-
-            assertTrue(validatorAt(IN_WINDOW).validate(credential))
+            assertEquals(ERROR_CODE_INVALID_MSO, verificationException.errorCode)
         }
 
-        @Test
-        fun `should throw when digestAlgorithm is unsupported`() {
+        @ParameterizedTest(name = "digestAlgorithm {0} is accepted")
+        @ValueSource(strings = ["SHA-256", "SHA-384", "SHA-512"])
+        fun `should accept supported digestAlgorithm`(digestAlgorithm: String) {
+            val mso = buildMso().apply { put(UnicodeString("digestAlgorithm"), UnicodeString(digestAlgorithm)) }
+            assertTrue(validatorAt(IN_WINDOW).validate(buildMdocCredential(mso)))
+        }
 
-            val mso = buildMso().apply {
-                put(UnicodeString("digestAlgorithm"), UnicodeString("MD5"))
-            }
-            val credential = buildMdocCredential(mso)
+        @ParameterizedTest(name = "digestAlgorithm {0} is rejected")
+        @ValueSource(strings = ["MD5", "SHA-1", "SHA-224", "sha-256"])
+        fun `should throw when digestAlgorithm is unsupported`(digestAlgorithm: String) {
+            val mso = buildMso().apply { put(UnicodeString("digestAlgorithm"), UnicodeString(digestAlgorithm)) }
 
             val verificationException = assertThrows(ValidationException::class.java) {
-                validatorAt(IN_WINDOW).validate(credential)
+                validatorAt(IN_WINDOW).validate(buildMdocCredential(mso))
             }
 
             assertEquals(ERROR_MESSAGE_INVALID_DIGEST_ALGORITHM, verificationException.errorMessage)
             assertEquals(ERROR_CODE_INVALID_DIGEST_ALGORITHM, verificationException.errorCode)
+        }
+
+        @Test
+        fun `should reject a missing digestAlgorithm`() {
+            val mso = buildMso().apply { remove(UnicodeString("digestAlgorithm")) }
+            val verificationException = assertThrows(ValidationException::class.java) {
+                validatorAt(IN_WINDOW).validate(buildMdocCredential(mso))
+            }
+            assertEquals(ERROR_CODE_INVALID_MSO, verificationException.errorCode)
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @ValueSource(strings = ["signed", "validFrom", "validUntil", "expectedUpdate"])
+        fun `should reject a validityInfo date that is not YYYY-MM-DDThh-mm-ssZ`(field: String) {
+            val base = mapOf(
+                "signed" to "2024-10-23T07:01:17",
+                "validFrom" to "2024-10-23T07:01:17",
+                "validUntil" to "2026-10-23T07:01:17",
+                "expectedUpdate" to "2025-10-23T07:01:17",
+            ).getValue(field)
+            val shiftedTo0530 = java.time.OffsetDateTime.parse("${base}Z")
+                .withOffsetSameInstant(java.time.ZoneOffset.ofHoursMinutes(5, 30))
+                .format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+            listOf("$base.0Z", "$base+00:00", shiftedTo0530, base, "2024-02-30T00:00:00Z").forEach { value ->
+                val exception = assertThrows(ValidationException::class.java, {
+                    validatorAt(IN_WINDOW).validate(buildMdocCredential(msoWithDate(field, value)))
+                }, "$field = $value")
+                assertTrue(exception.errorCode.isNotEmpty(), "$field = $value")
+            }
+            assertTrue(validatorAt(IN_WINDOW).validate(buildMdocCredential(msoWithDate(field, "${base}Z"))))
+        }
+
+        private fun msoWithDate(field: String, value: String): Map = when (field) {
+            "signed" -> buildMso(signed = taggedDate(value))
+            "validFrom" -> buildMso(validFrom = taggedDate(value))
+            "validUntil" -> buildMso(validUntil = taggedDate(value))
+            else -> buildMso(expectedUpdate = taggedDate(value))
+        }
+
+        @ParameterizedTest(name = "shape {0}")
+        @ValueSource(strings = ["A", "B", "C"])
+        fun `should reject an untagged validFrom in every shape`(shape: String) {
+            val mso = buildMso(validFrom = UnicodeString("2024-10-23T07:01:17Z"))
+            val exception = assertThrows(ValidationException::class.java) {
+                validatorAt(IN_WINDOW).validate(buildCredential(shape, mso))
+            }
+            assertEquals("Invalid validityInfo - validFrom is not in date format", exception.errorMessage)
+            assertEquals(ERROR_CODE_INVALID_VALIDITY_INFO, exception.errorCode)
         }
 
         @Test
@@ -745,6 +834,34 @@ class MsoMdocValidatorTest {
                     put(UnicodeString("0"), ByteString(ByteArray(32)))
                 })
             })
+        }
+
+        @Test
+        fun `should reject an MSO digestID key of 2^31 or above`() {
+            val exception = assertThrows(ValidationException::class.java) {
+                validatorAt(IN_WINDOW).validate(
+                    buildMdocCredential(msoWithValueDigests(Map().apply {
+                        put(UnicodeString("org.iso.18013.5.1"), Map().apply {
+                            put(UnsignedInteger(java.math.BigInteger.ONE.shiftLeft(31)), ByteString(ByteArray(32)))
+                        })
+                    }))
+                )
+            }
+            assertEquals(ERROR_MESSAGE_INVALID_MSO_DIGEST_ID, exception.errorMessage)
+            assertEquals(ERROR_CODE_INVALID_MSO, exception.errorCode)
+        }
+
+        @Test
+        fun `should accept an MSO digestID key of 2^31 - 1`() {
+            val valueDigests = Map().apply {
+                put(UnicodeString("org.iso.18013.5.1"), Map().apply {
+                    put(
+                        UnsignedInteger(java.math.BigInteger.ONE.shiftLeft(31).subtract(java.math.BigInteger.ONE)),
+                        ByteString(ByteArray(32))
+                    )
+                })
+            }
+            assertTrue(validatorAt(IN_WINDOW).validate(buildMdocCredential(msoWithValueDigests(valueDigests))))
         }
 
         @Test

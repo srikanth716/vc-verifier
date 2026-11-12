@@ -9,7 +9,6 @@ import co.nstant.`in`.cbor.model.Map
 import co.nstant.`in`.cbor.model.UnicodeString
 import co.nstant.`in`.cbor.model.UnsignedInteger
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_ALG
-import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_DIGEST_ALGORITHM
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_DIGEST_ID
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_DIGEST_SALT
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_DS_CERT_EKU
@@ -23,20 +22,22 @@ import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_MSO
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_SIGNED_OUTSIDE_DS_CERT
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_VALIDITY_INFO_MSO
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_VALID_FROM_MSO
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_VALUE_DIGESTS
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_MISSING_ALG
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_DIGEST_ID_OUT_OF_RANGE
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_DUPLICATE_ELEMENT_IDENTIFIER
-import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_DIGEST_ALGORITHM
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_DIGEST_ID
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_DIGEST_SALT
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_DS_CERT_EKU
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_DS_CERT_KEY_FOR_ALG
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_DS_CERT_KEY_USAGE
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_DS_CERT_SUBJECT
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_DS_CERT_VALIDITY
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_ISSUE_DATE
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_ISSUE_DATE_FORMAT
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_ISSUER_SIGNED_ITEM
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_ISSUER_SIGNED_ITEM_CONTENT
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_ISSUING_COUNTRY
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_ISSUING_JURISDICTION
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_MSO_ALG
@@ -44,21 +45,23 @@ import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_SIGNED_OUTSIDE_DS_CERT
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_VALUE_DIGESTS
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_VALUE_DIGESTS_STRUCTURE
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_INVALID_VALID_FROM_MSO
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_MALFORMED_PROTECTED_HEADER
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_MISSING_ALG
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_MISSING_DIGEST_ID
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_MISSING_SIGNED_MSO
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.VALID_FROM
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.COSE_ALG_HEADER_LABEL
-import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.DIGEST_ALGORITHM
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.DIGEST_ID
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.DIGEST_ID_MAX_EXCLUSIVE
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.DOCUMENTS
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.DOC_TYPE
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.ELEMENT_IDENTIFIER
+import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.ELEMENT_VALUE
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.EXTENDED_KEY_USAGE_OID
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.ISSUE_DATE
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.ISSUING_COUNTRY
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.ISSUING_JURISDICTION
-import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.IssuerSignedNamespaces
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.KEY_USAGE_DIGITAL_SIGNATURE
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.KEY_USAGE_OID
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.MDL_DOCTYPE
@@ -66,18 +69,19 @@ import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.MDL_DS_EKU
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.MDL_NAMESPACE
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.MIN_DIGEST_SALT_BYTES
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.MdocClock
-import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.MsoMdocDataElementValidator
+import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.DecodedIssuerSignedItem
+import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.MdlDataElementValidator
+import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.elementText
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.MsoMdocVerifiableCredential
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.MsoMdocVerificationOptions
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.RANDOM
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.SIGNED
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.SUPPORTED_COSE_ALGS
-import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.SUPPORTED_DIGEST_ALGORITHMS
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.VALIDITY_INFO
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.VALUE_DIGESTS
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.X5C
-import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.extractFieldValue
 import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.get
+import io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc.requireSupportedDigestAlgorithm
 import io.mosip.vercred.vcverifier.exception.InvalidPropertyException
 import io.mosip.vercred.vcverifier.exception.LikelyTamperedException
 import io.mosip.vercred.vcverifier.exception.SignatureVerificationException
@@ -91,6 +95,7 @@ import io.mosip.vercred.vcverifier.utils.DateUtils
 import io.mosip.vercred.vcverifier.utils.Util
 import org.bouncycastle.asn1.ASN1ObjectIdentifier
 import org.bouncycastle.asn1.ASN1String
+import org.bouncycastle.asn1.nist.NISTNamedCurves
 import org.bouncycastle.asn1.x500.X500Name
 import org.bouncycastle.asn1.x500.style.BCStyle
 import java.io.ByteArrayInputStream
@@ -98,8 +103,14 @@ import java.math.BigInteger
 import java.security.MessageDigest
 import java.security.cert.CertificateParsingException
 import java.security.cert.X509Certificate
+import java.security.interfaces.ECPublicKey
 import java.util.logging.Logger
 import javax.security.auth.x500.X500Principal
+import org.threeten.bp.Instant
+import org.threeten.bp.ZoneOffset
+
+private val P256_ORDER: BigInteger = NISTNamedCurves.getByName("P-256").n
+private const val P256_FIELD_SIZE = 256
 
 internal class MsoMdocVerifier(
     private val options: MsoMdocVerificationOptions = MsoMdocVerificationOptions(),
@@ -124,20 +135,24 @@ internal class MsoMdocVerifier(
              * d) The DocType in the MSO matches the relevant DocType in the “Documents” structure.
              */
 
+            // isLatest only decides where IssuerSigned was found (and the outer docType match);
+            // every other check runs the same way for shapes A, B and C.
             verifyCertificateChain(issuerAuth)
             verifyProtectedHeaderAlg(issuerAuth)
             val dsCertificate = verifyDsCertificate(issuerAuth, mobileSecurityObject)
+            verifyDsCertificateKeyMatchesAlg(dsCertificate)
             verifySignedWithinDsCertificateValidity(mobileSecurityObject, dsCertificate)
             if (!verificationOfCoseSignature(issuerAuth, dsCertificate)) {
                 throw SignatureVerificationException("COSE signature verification failed")
             }
-            verifyValueDigests(
+            // Items are decoded once here and reused by the mDL element checks.
+            val decodedItems = verifyValueDigests(
                 issuerSigned.namespaces,
                 issuerSigned.encodedNameSpaceItems,
                 mobileSecurityObject,
             )
             verifyDocType(decodedCredential, mobileSecurityObject, isLatest)
-            verifyMdlDataElements(mobileSecurityObject, issuerSigned.namespaces, dsCertificate)
+            verifyMdlDataElements(mobileSecurityObject, decodedItems, dsCertificate)
             return true
         } catch (exception: Exception) {
             when (exception) {
@@ -161,19 +176,21 @@ internal class MsoMdocVerifier(
     }
 
     private fun verifyProtectedHeaderAlg(issuerAuth: Array) {
-        val protectedHeaderItem = issuerAuth[0]
-        if (protectedHeaderItem !is ByteString || protectedHeaderItem.bytes.isEmpty()) {
+        val protectedHeaderItem = issuerAuth[0] as? ByteString
+            ?: throw ValidationException(ERROR_MESSAGE_MALFORMED_PROTECTED_HEADER, ERROR_CODE_MISSING_ALG)
+        // A zero-length protected header is an empty header map (RFC 9052), so alg is missing.
+        if (protectedHeaderItem.bytes.isEmpty()) {
             throw ValidationException(ERROR_MESSAGE_MISSING_ALG, ERROR_CODE_MISSING_ALG)
         }
         val protectedHeader = try {
-            CborDecoder(ByteArrayInputStream(protectedHeaderItem.bytes)).decode()[0] as Map
+            CborDecoder(ByteArrayInputStream(protectedHeaderItem.bytes)).decode()[0] as? Map
         } catch (exception: Exception) {
-            throw ValidationException(ERROR_MESSAGE_MISSING_ALG, ERROR_CODE_MISSING_ALG)
-        }
+            null
+        } ?: throw ValidationException(ERROR_MESSAGE_MALFORMED_PROTECTED_HEADER, ERROR_CODE_MISSING_ALG)
         if (!protectedHeader.keys.contains(UnsignedInteger(COSE_ALG_HEADER_LABEL))) {
             throw ValidationException(ERROR_MESSAGE_MISSING_ALG, ERROR_CODE_MISSING_ALG)
         }
-        // ES256/ES384/ES512 supported; EdDSA remains out of scope (#300).
+        // ES256 only; ES384/ES512/EdDSA tracked in #302.
         // Compare the full BigInteger so unsigned wrap values (e.g. 2^64-7) are not narrowed.
         val protectedAlg =
             (protectedHeader[UnsignedInteger(COSE_ALG_HEADER_LABEL)]
@@ -181,6 +198,17 @@ internal class MsoMdocVerifier(
                 ?.value
         if (protectedAlg == null || protectedAlg !in SUPPORTED_COSE_ALGS) {
             throw ValidationException(ERROR_MESSAGE_INVALID_MSO_ALG, ERROR_CODE_INVALID_ALG)
+        }
+    }
+
+    /** ES256 requires an EC P-256 DS key; any other key cannot produce a valid ES256 signature. */
+    private fun verifyDsCertificateKeyMatchesAlg(dsCertificate: X509Certificate) {
+        val publicKey = dsCertificate.publicKey as? ECPublicKey
+        val isP256 = publicKey != null &&
+            publicKey.params.order == P256_ORDER &&
+            publicKey.params.curve.field.fieldSize == P256_FIELD_SIZE
+        if (!isP256) {
+            throw ValidationException(ERROR_MESSAGE_INVALID_DS_CERT_KEY_FOR_ALG, ERROR_CODE_INVALID_ALG)
         }
     }
 
@@ -281,7 +309,7 @@ internal class MsoMdocVerifier(
 
     private fun verifyMdlDataElements(
         mso: Map,
-        issuerSignedNamespaces: IssuerSignedNamespaces,
+        items: List<DecodedIssuerSignedItem>,
         dsCertificate: X509Certificate,
     ) {
         val docType = (mso.getOrNull(DOC_TYPE) as? UnicodeString)?.string
@@ -289,12 +317,12 @@ internal class MsoMdocVerifier(
             return
         }
 
-        verifyIssuingCountry(dsCertificate, issuerSignedNamespaces)
-        verifyIssuingJurisdiction(dsCertificate, issuerSignedNamespaces)
-        verifyIssueDate(mso, issuerSignedNamespaces)
-        // §3.4 mandatory presence is gated inside the validator to full issued credentials only.
-        MsoMdocDataElementValidator.validate(
-            namespaces = issuerSignedNamespaces,
+        verifyIssuingCountry(dsCertificate, items)
+        verifyIssuingJurisdiction(dsCertificate, items)
+        verifyIssueDate(mso, items)
+        // §3.4 mandatory presence is gated inside the validator to a fully disclosed mDL namespace.
+        MdlDataElementValidator.validate(
+            items = items,
             mso = mso,
             checkTypesAndStructure = options.strictMdlProfile,
             checkMandatoryPresence = options.strictMdlProfile,
@@ -303,13 +331,10 @@ internal class MsoMdocVerifier(
 
     private fun verifyIssuingCountry(
         issuerCertificate: X509Certificate,
-        issuerSignedNamespaces: IssuerSignedNamespaces,
+        items: List<DecodedIssuerSignedItem>,
     ) {
         // Only an undisclosed element is skipped; a disclosed "" must still match the cert.
-        val issuingCountry = issuerSignedNamespaces.extractFieldValue(
-            ISSUING_COUNTRY,
-            MDL_NAMESPACE
-        ) ?: return
+        val issuingCountry = items.elementText(ISSUING_COUNTRY, MDL_NAMESPACE) ?: return
         val countryName = extractDnAttribute(issuerCertificate.subjectX500Principal, BCStyle.C)
             ?: throw ValidationException(
                 ERROR_MESSAGE_INVALID_ISSUING_COUNTRY,
@@ -325,14 +350,11 @@ internal class MsoMdocVerifier(
 
     private fun verifyIssuingJurisdiction(
         issuerCertificate: X509Certificate,
-        issuerSignedNamespaces: IssuerSignedNamespaces,
+        items: List<DecodedIssuerSignedItem>,
     ) {
         val stateOrProvinceName = extractDnAttribute(issuerCertificate.subjectX500Principal, BCStyle.ST)
             ?: return
-        val issuingJurisdiction = issuerSignedNamespaces.extractFieldValue(
-            ISSUING_JURISDICTION,
-            MDL_NAMESPACE
-        ) ?: return
+        val issuingJurisdiction = items.elementText(ISSUING_JURISDICTION, MDL_NAMESPACE) ?: return
 
         if (issuingJurisdiction != stateOrProvinceName) {
             throw ValidationException(
@@ -342,31 +364,29 @@ internal class MsoMdocVerifier(
         }
     }
 
-    private fun verifyIssueDate(mso: Map, issuerSignedNamespaces: IssuerSignedNamespaces) {
-        val issueDate = issuerSignedNamespaces.extractFieldValue(ISSUE_DATE, MDL_NAMESPACE)
-            ?: return
-        if (!DateUtils.isIsoFullDate(issueDate)) {
-            throw ValidationException(
+    /**
+     * issue_date must not be after the MSO validFrom (UTC date). ISO 18013-5 Table 5 allows
+     * issue_date as full-date or tdate; a tdate is compared by its UTC date. The CBOR tag
+     * (1004 / 0) is not checked here.
+     */
+    private fun verifyIssueDate(mso: Map, items: List<DecodedIssuerSignedItem>) {
+        val issueDate = items.elementText(ISSUE_DATE, MDL_NAMESPACE) ?: return
+        // Also rejects impossible calendar dates (e.g. 2024-13-45).
+        val issueLocalDate = DateUtils.parseFullDateOrTdateOrNull(issueDate)
+            ?: throw ValidationException(
                 ERROR_MESSAGE_INVALID_ISSUE_DATE_FORMAT,
                 ERROR_CODE_INVALID_ISSUE_DATE
             )
-        }
 
-        val issueLocalDate = try {
-            org.threeten.bp.LocalDate.parse(issueDate)
-        } catch (_: org.threeten.bp.format.DateTimeParseException) {
-            // Regex-only shape check can still admit impossible calendar dates (e.g. 2024-13-45).
-            throw ValidationException(
-                ERROR_MESSAGE_INVALID_ISSUE_DATE_FORMAT,
-                ERROR_CODE_INVALID_ISSUE_DATE
+        // verify() is public and may run without validate(), so a missing validFrom fails here too.
+        val validFromDate = (mso.getOrNull(VALIDITY_INFO) as? Map)?.getOrNull(VALID_FROM)
+            ?.let { DateUtils.parseDate(it.toString()) }
+            ?: throw ValidationException(
+                ERROR_MESSAGE_INVALID_VALID_FROM_MSO,
+                ERROR_CODE_INVALID_VALID_FROM_MSO
             )
-        }
-
-        val validFrom = (mso.getOrNull(VALIDITY_INFO) as? Map)?.getOrNull(VALID_FROM)
-            ?: return
-        val validFromDate = DateUtils.parseDate(validFrom.toString()) ?: return
-        val validFromUtcDate = org.threeten.bp.Instant.ofEpochMilli(validFromDate.time)
-            .atZone(org.threeten.bp.ZoneOffset.UTC)
+        val validFromUtcDate = Instant.ofEpochMilli(validFromDate.time)
+            .atZone(ZoneOffset.UTC)
             .toLocalDate()
         if (issueLocalDate.isAfter(validFromUtcDate)) {
             throw ValidationException(
@@ -472,14 +492,9 @@ internal class MsoMdocVerifier(
         issuerSignedNamespaces: Map,
         encodedNameSpaceItems: kotlin.collections.Map<String, List<ByteArray>>,
         mso: Map,
-    ): Boolean {
-        val digestAlgorithm = mso[DIGEST_ALGORITHM].toString()
-        if (digestAlgorithm !in SUPPORTED_DIGEST_ALGORITHMS) {
-            throw ValidationException(
-                ERROR_MESSAGE_INVALID_DIGEST_ALGORITHM,
-                ERROR_CODE_INVALID_DIGEST_ALGORITHM
-            )
-        }
+    ): List<DecodedIssuerSignedItem> {
+        val digestAlgorithm = requireSupportedDigestAlgorithm(mso)
+        val decodedItems = mutableListOf<DecodedIssuerSignedItem>()
         val digestsByNamespace = mso.getOrNull(VALUE_DIGESTS) as? Map
             ?: throw ValidationException(
                 ERROR_MESSAGE_INVALID_VALUE_DIGESTS_STRUCTURE,
@@ -537,15 +552,26 @@ internal class MsoMdocVerifier(
                 val decodedMap =
                     CborDecoder(ByteArrayInputStream(issuerSignedItem.bytes)).decode()[0] as? Map
                         ?: throw ValidationException(
-                            ERROR_MESSAGE_INVALID_ISSUER_SIGNED_ITEM,
+                            ERROR_MESSAGE_INVALID_ISSUER_SIGNED_ITEM_CONTENT,
                             ERROR_CODE_INVALID_ISSUER_SIGNED_ITEM
                         )
+                val elementIdentifier =
+                    (decodedMap.getOrNull(ELEMENT_IDENTIFIER) as? UnicodeString)?.string
+                val elementValue = decodedMap.getOrNull(ELEMENT_VALUE)
+                if (elementIdentifier == null || elementValue == null) {
+                    throw ValidationException(
+                        ERROR_MESSAGE_INVALID_ISSUER_SIGNED_ITEM_CONTENT,
+                        ERROR_CODE_INVALID_ISSUER_SIGNED_ITEM
+                    )
+                }
+
                 val digestId = (decodedMap.getOrNull(DIGEST_ID) as? UnsignedInteger)?.value
                     ?: throw ValidationException(
-                        ERROR_MESSAGE_DIGEST_ID_OUT_OF_RANGE,
+                        ERROR_MESSAGE_MISSING_DIGEST_ID,
                         ERROR_CODE_INVALID_DIGEST_ID
                     )
-                if (digestId.signum() < 0 || digestId >= DIGEST_ID_MAX_EXCLUSIVE) {
+                // UnsignedInteger.value is never negative, so only the upper bound is checked.
+                if (digestId >= DIGEST_ID_MAX_EXCLUSIVE) {
                     throw ValidationException(
                         ERROR_MESSAGE_DIGEST_ID_OUT_OF_RANGE,
                         ERROR_CODE_INVALID_DIGEST_ID
@@ -561,9 +587,7 @@ internal class MsoMdocVerifier(
                 }
 
                 // Element lookups (e.g. issuing_country) must not depend on which duplicate wins.
-                val elementIdentifier =
-                    (decodedMap.getOrNull(ELEMENT_IDENTIFIER) as? UnicodeString)?.string
-                if (elementIdentifier != null && !elementIdentifiers.add(elementIdentifier)) {
+                if (!elementIdentifiers.add(elementIdentifier)) {
                     throw ValidationException(
                         ERROR_MESSAGE_DUPLICATE_ELEMENT_IDENTIFIER,
                         ERROR_CODE_INVALID_ISSUER_SIGNED_ITEM
@@ -577,6 +601,7 @@ internal class MsoMdocVerifier(
                     )
                 }
                 calculatedDigests[digestId] = digest
+                decodedItems.add(DecodedIssuerSignedItem(namespace, digestId, elementIdentifier, elementValue))
             }
 
             for ((digestId, calculatedDigest) in calculatedDigests) {
@@ -592,7 +617,7 @@ internal class MsoMdocVerifier(
             }
         }
 
-        return true
+        return decodedItems
     }
 
     /**

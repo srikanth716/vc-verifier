@@ -12,6 +12,7 @@ import io.mockk.mockkObject
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_MSO
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_INVALID_MSO_DATE_FORMAT
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_CODE_VC_EXPIRED
+import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_MSO_NOT_TAGGED
 import io.mosip.vercred.vcverifier.constants.CredentialValidatorConstants.ERROR_MESSAGE_VC_EXPIRED
 import io.mosip.vercred.vcverifier.exception.ValidationException
 import io.mosip.vercred.vcverifier.utils.DateUtils
@@ -125,7 +126,10 @@ class MsoMdocVerifiableCredentialTest {
 
     // Credential verification and validation
     @Test
-    @Disabled("Requires ISO-conformant fixtures from inji-certify#1123 (no fractional seconds in validityInfo; mDL DS EKU)")
+    @Disabled(
+        "Needs a fresh Certify sample issued after inji-certify#1123 (these predate the validityInfo " +
+            "placeholders, so they carry fractional seconds) and a DS certificate with the mDL EKU (inji-certify#1132)"
+    )
     fun `should validate and verify valid mDocs successfully`() {
         val fixedNowMillis = Instant.parse("2026-08-01T00:00:00Z").toEpochMilli()
 
@@ -150,7 +154,7 @@ class MsoMdocVerifiableCredentialTest {
     }
 
     @Test
-    fun `should reject current certify fixture with fractional seconds in validityInfo`() {
+    fun `should reject validityInfo with fractional seconds (pre-placeholder Certify credential)`() {
         // Same VCI 1.0 sample used above; validFrom is 2026-07-20T04:47:42.716909Z
         val credential =
             "omppc3N1ZXJBdXRohEOhASahGCFZAxQwggMQMIIB-KADAgECAggGru5Xjrda-DANBgkqhkiG9w0BAQsFADB4MQswCQYDVQQGEwJJTjELMAkGA1UECAwCS0ExEjAQBgNVBAcMCUJBTkdBTE9SRTEOMAwGA1UECgwFSUlJVEIxFzAVBgNVBAsMDkVYQU1QTEUtQ0VOVEVSMR8wHQYDVQQDDBZ3d3cuZXhhbXBsZS5jb20gKFJPT1QpMB4XDTI2MDcxMzA2MzY0NloXDTI5MDcxMjA2MzY0NlowgZsxCzAJBgNVBAYTAklOMQswCQYDVQQIDAJLQTESMBAGA1UEBwwJQkFOR0FMT1JFMQ4wDAYDVQQKDAVJSUlUQjEXMBUGA1UECwwORVhBTVBMRS1DRU5URVIxQjBABgNVBAMMOXd3dy5leGFtcGxlLmNvbSAoQ0VSVElGWV9WQ19TSUdOX0VDX1IxLUVDX1NFQ1AyNTZSMV9TSUdOKTBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABCxNsdJnJDCpzS-oiskMiAXKts0KfSq0bKAcAF9AIVcylo234k6c5ze6zd-LYUq4qZt2Epj0JtzVJzWtXJBmy5-jRTBDMBIGA1UdEwEB_wQIMAYBAf8CAQEwHQYDVR0OBBYEFNTUxJGN9cvnw0bkpOY7hXCOgEIgMA4GA1UdDwEB_wQEAwIChDANBgkqhkiG9w0BAQsFAAOCAQEAdCMKCVQqQFNuXfZVD2JrmGHMdqmBsyEITavF8uIjOUu39qaaXyhvLeCggP7PjXJ8Cu141VKCkj6XHtvHM5iqCQsAQpjgzp6Hi27sau_yKLOOKBz8E2G9N9-skn9UiVJqSeZLOl_gRcPhbxVndQp7FZ4cdct4r_kObVt-W-BTlDJWjz54bPVhInnFfLpv2KlSqASRBIpbasMehVaYR7E9Rq_Ya5Ms5A8MYzXzdLeBdSWJCIyxmHasTax6cVM5GdqpAOjbJF_7k7X4JHBEIiDrJ_O0p9zwpBWdAn_Kb-oCe3VQHzrmeCsp2uyNRvzEqJ5Yd5b26-V8C8yBj7P7Uaa-PlkCUNgYWQJLpmdkb2NUeXBldW9yZy5pc28uMTgwMTMuNS4xLm1ETGd2ZXJzaW9uYzEuMGx2YWxpZGl0eUluZm-jZnNpZ25lZMB4GzIwMjYtMDctMjBUMDQ6NDc6NDIuNzE2OTA5Wml2YWxpZEZyb23AeBsyMDI2LTA3LTIwVDA0OjQ3OjQyLjcxNjkwOVpqdmFsaWRVbnRpbMB4GDIwMjgtMDctMjBUMDQ6NDc6NDIuNzE3Wmx2YWx1ZURpZ2VzdHOhcW9yZy5pc28uMTgwMTMuNS4xpgBYILcu1K9SpiobtelCZX5_BHQrOJCCoaXtJCGX35eeFnQSAVggApvPGQYz3DLYRbetDpT0-31okQ5uzWRwzrff00yMD7oCWCD4d3HGgi-70QBlGoiU5nggSPzpSI5GkxXdsOyG4ArVLgNYIOQbLhdNqN_8kCZzqVswmMeQ6MtpvttlT16uBgWMKdFyBFgg_hMVI7VctilrrgdQPGCdIEL4VgkVVaEMEvKcIY_xJKUFWCAtv66ml2lD15WYUUzAS6gJYj1DALcrbw9xjFFrZkhUuG1kZXZpY2VLZXlJbmZvoWlkZXZpY2VLZXmmAQICWCtlNjVnMnVDNmJCMEREZGZNRzhTYlZ2TDFNSWxSNENxcGRoUWE4YmZQUDNVAyYgASFYILQicKMUp8767SCHDrTO6yWjmAm-WIjudd3pRo_zI7myIlggPBprbay4iRPtNiVtbVob_u3AQxpRmqWQSup7zPyNuLlvZGlnZXN0QWxnb3JpdGhtZ1NIQS0yNTZYQBCVJ3YkZ1ETAuhULd1ZGTv6ONhH_NsP61FIfpe69uLWEBThcUiJq7y_KRMms9KVi7pYcU3WhiNlOUC6hSYrB_1qbmFtZVNwYWNlc6Fxb3JnLmlzby4xODAxMy41LjGG2BhYZaRmcmFuZG9tWBiq53HDBUk9X9igBaZDmBelpFQndR2-nl9oZGlnZXN0SUQAbGVsZW1lbnRWYWx1ZW0ke2ZhbWlseU5hbWV9cWVsZW1lbnRJZGVudGlmaWVya2ZhbWlseV9uYW1l2BhYY6RmcmFuZG9tWBgvL1T9pXgeuDdhIpe9VL0dEFL8IXB5rkJoZGlnZXN0SUQBbGVsZW1lbnRWYWx1ZWwke2dpdmVuTmFtZX1xZWxlbWVudElkZW50aWZpZXJqZ2l2ZW5fbmFtZdgYWGOkZnJhbmRvbVgYMuPQgcDhX9FgtaLBg5aC2SmZpPPsyUYlaGRpZ2VzdElEAmxlbGVtZW50VmFsdWVsJHtiaXJ0aERhdGV9cWVsZW1lbnRJZGVudGlmaWVyamJpcnRoX2RhdGXYGFhepGZyYW5kb21YGG9QaSwv6jAPrlLBDqMcpymi-NiA9MEChGhkaWdlc3RJRANsZWxlbWVudFZhbHVlYklOcWVsZW1lbnRJZGVudGlmaWVyb2lzc3VpbmdfY291bnRyedgYWG2kZnJhbmRvbVgYKA4VkRJdH22UPLypb9bl72lXGuja-E2xaGRpZ2VzdElEBGxlbGVtZW50VmFsdWVxJHtkb2N1bWVudE51bWJlcn1xZWxlbWVudElkZW50aWZpZXJvZG9jdW1lbnRfbnVtYmVy2BhYYKRmcmFuZG9tWBhb4Thi6agJuh0LXOhY3pRuffpIZgeZq9xoZGlnZXN0SUQFbGVsZW1lbnRWYWx1ZWske3BvcnRyYWl0fXFlbGVtZW50SWRlbnRpZmllcmhwb3J0cmFpdA"
@@ -298,22 +302,35 @@ class MsoMdocVerifiableCredentialTest {
                 credentialParser.parse(credential)
             }
 
-            assertEquals("mso is not tagged", exception.errorMessage)
+            assertEquals(ERROR_MESSAGE_MSO_NOT_TAGGED, exception.errorMessage)
             assertEquals(ERROR_CODE_INVALID_MSO, exception.errorCode)
         }
 
         @Test
-        fun `should accept legacy issuerSigned structure when mso payload is not tagged with 24`() {
-            // The tag-24 requirement only applies to the latest OpenID4VCI 1.0 structure;
-            // legacy docType-issuerSigned credentials are exempt from it.
-            val mso = buildMso()
-            val issuerAuth = buildIssuerAuth(mso, tagPayload = false)
+        fun `should reject legacy issuerSigned structure when mso payload is not tagged with 24`() {
+            // ISO 18013-5 §9.1.2.4: tag 24 is required for every shape.
+            val issuerAuth = buildIssuerAuth(buildMso(), tagPayload = false)
             val credential = buildLegacyIssuerSignedCredential(issuerAuth)
 
-            val (_, credentialData, isLatest) = credentialParser.parse(credential)
+            val exception = assertThrows(ValidationException::class.java) {
+                credentialParser.parse(credential)
+            }
 
-            assertFalse(isLatest)
-            assertNotNull(credentialData.mso)
+            assertEquals(ERROR_MESSAGE_MSO_NOT_TAGGED, exception.errorMessage)
+            assertEquals(ERROR_CODE_INVALID_MSO, exception.errorCode)
+        }
+
+        @Test
+        fun `should reject documents-wrapped structure when mso payload is not tagged with 24`() {
+            val issuerAuth = buildIssuerAuth(buildMso(), tagPayload = false)
+            val credential = buildLegacyDocumentsCredential(issuerAuth)
+
+            val exception = assertThrows(ValidationException::class.java) {
+                credentialParser.parse(credential)
+            }
+
+            assertEquals(ERROR_MESSAGE_MSO_NOT_TAGGED, exception.errorMessage)
+            assertEquals(ERROR_CODE_INVALID_MSO, exception.errorCode)
         }
 
         @Test

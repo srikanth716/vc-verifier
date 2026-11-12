@@ -4,8 +4,9 @@ package io.mosip.vercred.vcverifier.credentialverifier.types.msomdoc
  * Options for mso_mdoc / mDL verification.
  *
  * [strictMdlProfile] (default true) enforces ISO mDL DS KeyUsage/EKU profile and §3 field checks.
- * Set false temporarily for non-conformant Certify fixtures until
- * inji-certify#1123 / #1132 / #1147 land (issue #300).
+ * Set false temporarily for non-conformant Certify credentials until the DS certificate
+ * KeyUsage/EKU fix (inji-certify#1132) and the §3 field fixes such as `portrait` as bytes
+ * (inji-certify#1147 item 6) land (issue #300).
  *
  * [currentTimeMillis] supplies "now" for every mdoc time check (DS certificate validity,
  * validFrom / signed not in the future, validUntil expiry). Injectable so tests can pin the clock.

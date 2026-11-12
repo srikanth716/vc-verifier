@@ -4,10 +4,10 @@ import co.nstant.`in`.cbor.CborDecoder
 import co.nstant.`in`.cbor.model.Array
 import co.nstant.`in`.cbor.model.ByteString
 import co.nstant.`in`.cbor.model.DataItem
-import co.nstant.`in`.cbor.model.MajorType
 import co.nstant.`in`.cbor.model.Map
 import co.nstant.`in`.cbor.model.UnicodeString
 import java.io.ByteArrayInputStream
+import java.math.BigInteger
 import java.util.logging.Logger
 
 
@@ -21,6 +21,10 @@ fun IssuerSignedNamespaces.extractFieldValue(fieldToBeExtracted: String): String
     return extractFieldValue(fieldToBeExtracted, namespaceFilter = null) ?: ""
 }
 
+/**
+ * Assumes [this] has passed MsoMdocVerifier.verifyValueDigests (every item a tag-24 bstr holding
+ * an IssuerSignedItem map with a text elementIdentifier). Items that are not byte strings are skipped.
+ */
 fun IssuerSignedNamespaces.extractFieldValue(
     fieldToBeExtracted: String,
     namespaceFilter: String?,
@@ -43,7 +47,7 @@ fun IssuerSignedNamespaces.extractFieldValue(
                 ((decodedIssuerSignedItem[ELEMENT_IDENTIFIER]) as UnicodeString).string
 
             if (elementIdentifier == fieldToBeExtracted) {
-                val elementValue = decodedIssuerSignedItem["elementValue"]
+                val elementValue = decodedIssuerSignedItem[ELEMENT_VALUE]
                 return when (elementValue) {
                     is UnicodeString -> elementValue.string
                     else -> elementValue?.toString()
@@ -54,25 +58,38 @@ fun IssuerSignedNamespaces.extractFieldValue(
     return null
 }
 
+/** One received IssuerSignedItem, decoded once by MsoMdocVerifier.verifyValueDigests and reused by later checks. */
+internal data class DecodedIssuerSignedItem(
+    val namespace: String,
+    val digestId: BigInteger,
+    val elementIdentifier: String,
+    val elementValue: DataItem,
+)
+
+/**
+ * Value of [identifier] in [namespace] as text (a tstr's content, otherwise its toString()),
+ * or null when the element is not disclosed. Same conversion as [extractFieldValue].
+ */
+internal fun List<DecodedIssuerSignedItem>.elementText(identifier: String, namespace: String): String? {
+    val value = firstOrNull { it.namespace == namespace && it.elementIdentifier == identifier }
+        ?.elementValue
+        ?: return null
+    return (value as? UnicodeString)?.string ?: value.toString()
+}
+
 fun IssuerAuth.extractMso(): Map {
     if (this == null) {
         logger.severe("IssuerAuth in credential is not available")
         throw RuntimeException("Invalid Issuer Auth")
     }
 
-    val decodedPayload: DataItem? =
-        CborDecoder.decode((this[2] as ByteString).bytes)[0]
-    val mso: Map
-    if ((decodedPayload?.majorType ?: MajorType.INVALID) == MajorType.MAP) {
-        mso = decodedPayload as Map
-    } else if ((decodedPayload?.majorType ?: MajorType.ARRAY) == MajorType.BYTE_STRING) {
-        val decodedPayloadLevel2: DataItem? =
-            CborDecoder.decode((decodedPayload as ByteString).bytes)[0]
-        mso = decodedPayloadLevel2 as Map
-    } else {
+    // Only the ISO form is accepted: #6.24(bstr .cbor MobileSecurityObject).
+    val payload = CborDecoder.decode((this[2] as ByteString).bytes)[0]
+    if (payload !is ByteString || payload.tag?.value != TAG_ENCODED_CBOR) {
         throw RuntimeException("Invalid Issuer Auth")
     }
-    return mso
+    return CborDecoder.decode(payload.bytes)[0] as? Map
+        ?: throw RuntimeException("Invalid Issuer Auth")
 }
 
 data class MsoMdocCredentialData(val docType: DataItem?, val issuerSigned: IssuerSigned, val mso: Map) {

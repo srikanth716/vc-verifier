@@ -23,11 +23,13 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.math.BigInteger
 import java.security.KeyFactory
+import java.security.KeyPairGenerator
 import java.security.MessageDigest
 import java.security.PrivateKey
 import java.security.Signature
 import java.security.cert.CertificateFactory
 import java.security.cert.X509Certificate
+import java.security.spec.ECGenParameterSpec
 import java.security.spec.PKCS8EncodedKeySpec
 import java.time.Instant
 import java.time.ZoneOffset
@@ -69,6 +71,15 @@ internal object MsoMdocTestCredentialFactory {
         discloseOnly: Set<String>? = null,
         tamperedElement: Pair<String, DataItem>? = null,
         longFormItemHeaders: Boolean = false,
+        /** Sends the MSO as a bare bstr instead of #6.24(bstr). */
+        untaggedMso: Boolean = false,
+        /** COSE alg value; placed in the protected header unless [algInUnprotectedHeader]. */
+        alg: Long = -7,
+        algInUnprotectedHeader: Boolean = false,
+        /** Replaces (or, with null, removes) validityInfo entries, e.g. "validFrom" to an untagged date. */
+        validityInfoOverrides: Map<String, DataItem?> = emptyMap(),
+        /** Extra mDL items (digestID, elementIdentifier, value) sent first and never digested in the MSO. */
+        forgedItems: List<Triple<Long, String, DataItem>> = emptyList(),
     ): String {
         val privateKey = loadPrivateKey()
         val dsCertificate = certificate ?: loadCertificate(includeKeyUsage)
@@ -78,6 +89,11 @@ internal object MsoMdocTestCredentialFactory {
         val valueDigests = CborMap()
         allNamespaces.forEach { (namespace, namespaceRecords) ->
             val wireItems = mutableListOf<ByteArray>()
+            if (namespace == MDL_NAMESPACE) {
+                forgedItems.forEachIndexed { index, (digestId, identifier, value) ->
+                    wireItems.add(issuerSignedItemBytes(digestId, 100 + index, identifier, value, longFormItemHeaders))
+                }
+            }
             val digestMap = CborMap()
             namespaceRecords.forEachIndexed { index, (identifier, value) ->
                 val digestId = index.toLong()
@@ -117,17 +133,23 @@ internal object MsoMdocTestCredentialFactory {
                     signed?.let { put(UnicodeString("signed"), taggedDate(it)) }
                     put(UnicodeString("validFrom"), taggedDate(validFrom))
                     put(UnicodeString("validUntil"), taggedDate(validUntil))
+                    validityInfoOverrides.forEach { (key, value) ->
+                        if (value == null) remove(UnicodeString(key)) else put(UnicodeString(key), value)
+                    }
                 }
             )
         }
-        val payload = encode(ByteString(encode(mso)).apply { setTag(24) })
+        val payload = if (untaggedMso) encode(ByteString(encode(mso)))
+        else encode(ByteString(encode(mso)).apply { setTag(24) })
+        val algItem: DataItem = if (alg < 0) NegativeInteger(alg) else UnsignedInteger(alg)
         val protectedHeader = encode(
-            CborMap().apply { put(UnsignedInteger(1), NegativeInteger(-7)) }
+            CborMap().apply { if (!algInUnprotectedHeader) put(UnsignedInteger(1), algItem) }
         )
         val issuerAuth = CborArray().apply {
             add(ByteString(protectedHeader))
             add(
                 CborMap().apply {
+                    if (algInUnprotectedHeader) put(UnsignedInteger(1), algItem)
                     put(UnsignedInteger(33), ByteString(dsCertificate.encoded))
                 }
             )
@@ -167,6 +189,30 @@ internal object MsoMdocTestCredentialFactory {
             )
         }
         val signer = JcaContentSignerBuilder("SHA256withECDSA").build(loadPrivateKey())
+        return JcaX509CertificateConverter().getCertificate(builder.build(signer))
+    }
+
+    /** Self-signed certificate over a fresh EC P-384 key (not the fixture P-256 DS key). */
+    fun generateP384Certificate(): X509Certificate {
+        val keyPair = KeyPairGenerator.getInstance("EC")
+            .apply { initialize(ECGenParameterSpec("secp384r1")) }
+            .generateKeyPair()
+        val name = X500Name(DEFAULT_SUBJECT)
+        val builder = JcaX509v3CertificateBuilder(
+            name,
+            BigInteger.valueOf(System.nanoTime()),
+            Date.from(DEFAULT_CERT_NOT_BEFORE),
+            Date.from(DEFAULT_CERT_NOT_AFTER),
+            name,
+            keyPair.public,
+        )
+        builder.addExtension(Extension.keyUsage, true, KeyUsage(KeyUsage.digitalSignature))
+        builder.addExtension(
+            Extension.extendedKeyUsage,
+            true,
+            ExtendedKeyUsage(KeyPurposeId.getInstance(ASN1ObjectIdentifier(MDL_DS_EKU)))
+        )
+        val signer = JcaContentSignerBuilder("SHA384withECDSA").build(keyPair.private)
         return JcaX509CertificateConverter().getCertificate(builder.build(signer))
     }
 

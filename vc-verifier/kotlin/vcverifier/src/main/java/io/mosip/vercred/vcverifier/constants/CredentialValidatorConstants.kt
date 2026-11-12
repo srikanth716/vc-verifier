@@ -80,8 +80,9 @@ object CredentialValidatorConstants {
 
     const val ERROR_MESSAGE_INVALID_VALID_FROM_MSO = "invalid validFrom in the MSO of the credential"
     const val ERROR_CODE_INVALID_VALID_FROM_MSO = "${ERROR_CODE_INVALID}VALID_FROM_MSO"
+    const val ERROR_MESSAGE_VALID_FROM_BEFORE_SIGNED_MSO = "validFrom must not be earlier than signed"
 
-    const val ERROR_MESSAGE_INVALID_VALID_UNTIL_MSO = "invalid validUntil in the MSO of the credential"
+    const val ERROR_MESSAGE_INVALID_VALID_UNTIL_MSO = "validUntil in the MSO is not a valid date"
     const val ERROR_CODE_INVALID_VALID_UNTIL_MSO = "${ERROR_CODE_INVALID}VALID_UNTIL_MSO"
 
     const val ERROR_MESSAGE_INVALID_DATE_MSO = "invalid validUntil / validFrom in the MSO of the credential"
@@ -129,10 +130,12 @@ object CredentialValidatorConstants {
         "Duplicate digestID found in a namespace"
     const val ERROR_MESSAGE_DIGEST_ID_OUT_OF_RANGE =
         "digestID must be an unsigned integer less than 2^31"
+    const val ERROR_MESSAGE_MISSING_DIGEST_ID =
+        "digestID is missing or not an unsigned integer"
 
     const val ERROR_CODE_INVALID_DIGEST_SALT = "${ERROR_CODE_INVALID}DIGEST_SALT"
     const val ERROR_MESSAGE_INVALID_DIGEST_SALT =
-        "IssuerSignedItem random (salt) must be at least 16 bytes"
+        "IssuerSignedItem random (salt) must be a byte string of at least 16 bytes"
 
     const val ERROR_CODE_INVALID_DIGEST_ALGORITHM = "${ERROR_CODE_INVALID}DIGEST_ALGORITHM"
     const val ERROR_MESSAGE_INVALID_DIGEST_ALGORITHM =
@@ -143,15 +146,18 @@ object CredentialValidatorConstants {
 
     const val ERROR_CODE_MISSING_ALG = "${ERROR_CODE_MISSING}ALG"
     const val ERROR_MESSAGE_MISSING_ALG = "alg is missing from the COSE protected header"
+    const val ERROR_MESSAGE_MALFORMED_PROTECTED_HEADER = "COSE protected header is malformed"
 
     const val ERROR_CODE_INVALID_ALG = "${ERROR_CODE_INVALID}ALG"
-    const val ERROR_MESSAGE_INVALID_MSO_ALG = "alg must be ES256 (-7), ES384 (-35) or ES512 (-36)"
+    const val ERROR_MESSAGE_INVALID_MSO_ALG = "alg must be ES256 (-7)"
+    const val ERROR_MESSAGE_INVALID_DS_CERT_KEY_FOR_ALG =
+        "DS certificate key must be an EC P-256 key for ES256"
 
     const val ERROR_CODE_INVALID_MDL_ELEMENT = "${ERROR_CODE_INVALID}MDL_ELEMENT"
     const val ERROR_MESSAGE_INVALID_MDL_ELEMENT_TYPE =
         "mDL data element has an invalid type"
     const val ERROR_MESSAGE_INVALID_MDL_ELEMENT_TEXT =
-        "mDL text element must be Latin-1 and at most 150 characters"
+        "mDL text element must be printable Latin-1 and at most 150 characters"
     const val ERROR_MESSAGE_INVALID_DRIVING_PRIVILEGES =
         "driving_privileges structure is invalid"
     const val ERROR_MESSAGE_MISSING_MDL_MANDATORY_ELEMENT =
@@ -163,11 +169,13 @@ object CredentialValidatorConstants {
     const val ERROR_MESSAGE_INVALID_ISSUE_DATE =
         "issue_date must not be after validFrom"
     const val ERROR_MESSAGE_INVALID_ISSUE_DATE_FORMAT =
-        "issue_date must be a valid full date (YYYY-MM-DD)"
+        "issue_date must be a valid full-date (YYYY-MM-DD) or tdate (YYYY-MM-DDThh:mm:ssZ)"
 
     const val ERROR_CODE_INVALID_ISSUER_SIGNED_ITEM = "${ERROR_CODE_INVALID}ISSUER_SIGNED_ITEM"
     const val ERROR_MESSAGE_INVALID_ISSUER_SIGNED_ITEM =
         "Each nameSpaces record must be a tag-24 byte string"
+    const val ERROR_MESSAGE_INVALID_ISSUER_SIGNED_ITEM_CONTENT =
+        "IssuerSignedItem must be a map with a text elementIdentifier and an elementValue"
     const val ERROR_MESSAGE_DUPLICATE_ELEMENT_IDENTIFIER =
         "Duplicate elementIdentifier found in a namespace"
     const val ERROR_MESSAGE_INVALID_NAME_SPACES_ENCODING =
@@ -175,6 +183,10 @@ object CredentialValidatorConstants {
 
     const val ERROR_MESSAGE_INVALID_VALUE_DIGESTS_STRUCTURE =
         "valueDigests must map each namespace to a map of digestID (uint) to digest (bstr)"
+    const val ERROR_MESSAGE_MSO_NOT_TAGGED =
+        "MSO payload must be tag-24 encoded MobileSecurityObjectBytes"
+    const val ERROR_MESSAGE_INVALID_MSO_DIGEST_ID =
+        "valueDigests digestID keys must be less than 2^31"
     const val ERROR_MESSAGE_MISSING_SIGNED_MSO = "validityInfo->signed is missing in the MSO of the credential"
 
     const val ERROR_CODE_INVALID_MSO_DATE_FORMAT = "${ERROR_CODE_INVALID}MSO_DATE_FORMAT"
