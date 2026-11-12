@@ -75,16 +75,16 @@ Order of checks:
    - Raw item bytes are captured by a minimal CBOR scanner that rejects indefinite-length encoding. This is a deliberate restriction, not an ISO requirement; such input fails with `ERR_INVALID_ISSUER_SIGNED_ITEM`
 7. Credential `docType` matches MSO `docType` (legacy shapes). Shape C still uses only `documents[0]` (spike: multi-doc later)
 8. For mDL: if `issuing_country` is disclosed (including `""`) it must match DS `C`; `issuing_jurisdiction` matches `ST` when both present. Values are compared raw (not RFC 4514 escaped); an unparseable DS subject → `ERR_INVALID_DS_CERT_SUBJECT`; `issue_date` (if disclosed) must be a valid full-date or tdate (compared by its UTC date) and not after `validFrom`
-9. For mDL **when `mdocStrictProfile=true`** (`MdlDataElementValidator`, docType `org.iso.18013.5.1.mDL` only), all `ERR_INVALID_MDL_ELEMENT`:
-   - ISO Table 5 types: `portrait` / `biometric_template_*` / `signature_usual_mark` bstr; `birth_date` full-date; `issue_date` / `expiry_date` full-date or tdate; `issuing_country` / `nationality` / `resident_country` ISO 3166-1 alpha-2 (`^[A-Z]{2}$`); `un_distinguishing_sign` 1–3 capital letters; `height`, `weight`, `sex`, `age_in_years`, `age_birth_year` uint; `age_over_NN` bool
+9. For mDL (`MdlDataElementValidator`, docType `org.iso.18013.5.1.mDL` only), all `ERR_INVALID_MDL_ELEMENT`. Only the first bullet (§3.1 types) depends on `mdocStrictProfile`; the rest always run, and in relaxed mode they skip a wrong-typed value instead of reporting it:
+   - **Strict only (§3.1)**, ISO Table 5 types: `portrait` / `biometric_template_*` / `signature_usual_mark` bstr; `birth_date` full-date; `issue_date` / `expiry_date` full-date or tdate; `issuing_country` / `nationality` / `resident_country` ISO 3166-1 alpha-2 (`^[A-Z]{2}$`); `un_distinguishing_sign` 1–3 capital letters; `height`, `weight`, `sex`, `age_in_years`, `age_birth_year` uint; `age_over_NN` bool
    - Listed text fields (`family_name`, `given_name`, `resident_address`, ...) are printable Latin-1 (0x20–0x7E, 0xA0–0xFF; control characters rejected), ≤150 characters. `*_national_character` names allow full UTF-8
    - `driving_privileges` is an array (may be empty) of maps, each with a non-empty text `vehicle_category_code`, optional full-date `issue_date` / `expiry_date`, and optional non-empty `codes` whose entries have a text `code` and, if present, text `sign` / `value`. The detail is logged; the returned message is generic
    - Age claims vs `birth_date`, accepting the issuer's calculation at `signed` or `validFrom`: `age_over_NN = true` needs age at `validFrom` ≥ NN, `false` needs age at `signed` < NN, `age_in_years` must lie between the two ages. `birth_date` after `validFrom` is rejected; without `birth_date` nothing is checked
    - **Mandatory field presence only when the mDL namespace is fully disclosed** (every MSO digest for `org.iso.18013.5.1` is present in `nameSpaces`); missing identifiers are logged, not returned. Selective disclosure skips §3.4, so a non-conformant issuer's mDL that omits a mandatory field from the MSO still passes whenever the holder hides another element. This is a verifier-side limitation
    - Certify `portrait` is still text until inji-certify#1147 item 6
 
-Use `CredentialsVerifier.verify(..., mdocStrictProfile = false)` to temporarily relax KeyUsage/EKU + §3 field checks for non-conformant Certify fixtures (issue #300).
-`mdocStrictProfile` defaults to `true`, so Inji Verify and the wallet must pass `false` (through a config property set in every environment) until inji-certify#1132 (DS EKU) and inji-certify#1147 (field fixes) land.
+Use `CredentialsVerifier.verify(..., mdocStrictProfile = false)` to temporarily relax **only** issue #300 §1.2 (DS KeyUsage/EKU) and §3.1 (element types) for non-conformant Certify credentials. `driving_privileges` structure, Latin-1 text, mandatory elements and age consistency are always enforced. Remove the flag once inji-certify#1132 and #1147 are closed.
+`mdocStrictProfile` defaults to `true`, so Inji Verify and the wallet must pass `false` (through a config property set in every environment) until inji-certify#1132 (DS EKU) and inji-certify#1147 (element types) land.
 
 ## Out of scope
 
@@ -111,6 +111,7 @@ Use `CredentialsVerifier.verify(..., mdocStrictProfile = false)` to temporarily 
 - Strict mDL field checks are tighter: country codes must be alpha-2, text fields reject control characters,
   `driving_privileges` code `sign` / `value` must be text, and age claims accept either `signed` or `validFrom` as the calculation time
 - The missing-mandatory-element message no longer lists the identifiers (they are logged)
+- `mdocStrictProfile = false` now relaxes only DS KeyUsage/EKU and mDL element types; `driving_privileges` structure, Latin-1 text, mandatory elements and age consistency are enforced in both modes
 - `MsoMdocVerificationOptions` gains `currentTimeMillis`; `MsoMdocCredentialData.IssuerSigned.encodedNameSpaceItems` no longer has a default
 
 ## Error codes

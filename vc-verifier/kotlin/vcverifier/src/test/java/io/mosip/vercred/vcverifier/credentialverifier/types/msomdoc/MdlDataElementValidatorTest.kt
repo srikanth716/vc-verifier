@@ -41,15 +41,14 @@ class MdlDataElementValidatorTest {
     }
 
     @Test
-    fun `should not check types when checkTypesAndStructure is false`() {
+    fun `should not check element types when checkElementTypes is false`() {
         val elements = wrongTypes().map { it.get()[0] as String to it.get()[1] as DataItem }
             .distinctBy { it.first }
         assertDoesNotThrow {
             MdlDataElementValidator.validate(
                 items = itemsOf(*elements.toTypedArray()),
                 mso = CborMap(),
-                checkTypesAndStructure = false,
-                checkMandatoryPresence = false,
+                checkElementTypes = false,
             )
         }
     }
@@ -58,7 +57,46 @@ class MdlDataElementValidatorTest {
     fun `should ignore elements of other namespaces`() {
         val item = DecodedIssuerSignedItem("org.example", BigInteger.ZERO, "portrait", UnicodeString("text"))
         assertDoesNotThrow {
-            MdlDataElementValidator.validate(listOf(item), CborMap(), checkTypesAndStructure = true, checkMandatoryPresence = false)
+            MdlDataElementValidator.validate(listOf(item), msoWithDigests(0), checkElementTypes = true)
+        }
+    }
+
+    // ---- relaxed mode (mdocStrictProfile = false): only §3.1 is skipped ----
+
+    @Test
+    fun `should still check driving_privileges structure when element types are relaxed`() {
+        val camelCase = arrayOf(mapOf("vehicleCategoryCode" to UnicodeString("A")))
+        assertInvalid { validateRelaxed("driving_privileges" to camelCase) }
+    }
+
+    @Test
+    fun `should still check Latin-1 text when element types are relaxed`() {
+        assertInvalid { validateRelaxed("family_name" to UnicodeString("日本")) }
+        assertInvalid { validateRelaxed("family_name" to UnicodeString("a".repeat(151))) }
+    }
+
+    @Test
+    fun `should still check age consistency when element types are relaxed`() {
+        assertInvalid {
+            validateRelaxed(
+                "birth_date" to UnicodeString("2010-01-01"),
+                "age_over_18" to TRUE,
+                mso = msoWithValidity(validFrom = "2024-01-01T00:00:00Z"),
+            )
+        }
+    }
+
+    @Test
+    fun `should skip, not report, wrong-typed values in the always-on checks when relaxed`() {
+        assertDoesNotThrow {
+            validateRelaxed(
+                "family_name" to ByteString(byteArrayOf(1)),
+                "birth_date" to UnicodeString("2010-01-01"),
+                "age_over_18" to UnicodeString("true"),
+                "age_in_years" to UnicodeString("30"),
+                "portrait" to UnicodeString("base64-portrait"),
+                mso = msoWithValidity(validFrom = "2024-01-01T00:00:00Z"),
+            )
         }
     }
 
@@ -137,8 +175,7 @@ class MdlDataElementValidatorTest {
             MdlDataElementValidator.validate(
                 items = itemsOf("family_name" to UnicodeString("Doe")),
                 mso = msoWithDigests(0),
-                checkTypesAndStructure = false,
-                checkMandatoryPresence = true,
+                checkElementTypes = false,
             )
         }
         // The missing identifiers are logged, not returned.
@@ -152,8 +189,7 @@ class MdlDataElementValidatorTest {
             MdlDataElementValidator.validate(
                 items = itemsOf("family_name" to UnicodeString("Doe")),
                 mso = msoWithDigests(0, 1),
-                checkTypesAndStructure = false,
-                checkMandatoryPresence = true,
+                checkElementTypes = false,
             )
         }
     }
@@ -164,8 +200,7 @@ class MdlDataElementValidatorTest {
             MdlDataElementValidator.validate(
                 items = emptyList(),
                 mso = msoWithDigests(0),
-                checkTypesAndStructure = false,
-                checkMandatoryPresence = true,
+                checkElementTypes = false,
             )
         }
     }
@@ -176,8 +211,7 @@ class MdlDataElementValidatorTest {
             MdlDataElementValidator.validate(
                 items = emptyList(),
                 mso = CborMap(),
-                checkTypesAndStructure = false,
-                checkMandatoryPresence = true,
+                checkElementTypes = false,
             )
         }
     }
@@ -201,8 +235,7 @@ class MdlDataElementValidatorTest {
             MdlDataElementValidator.validate(
                 items = itemsOf(*requiredElements.toTypedArray()),
                 mso = msoWithDigests(*requiredElements.indices.map { it.toLong() }.toLongArray()),
-                checkTypesAndStructure = true,
-                checkMandatoryPresence = true,
+                checkElementTypes = true,
             )
         }
     }
@@ -318,9 +351,11 @@ class MdlDataElementValidatorTest {
         MdlDataElementValidator.validate(
             items = itemsOf(*elements),
             mso = mso,
-            checkTypesAndStructure = true,
-            checkMandatoryPresence = false,
+            checkElementTypes = true,
         )
+
+    private fun validateRelaxed(vararg elements: Pair<String, DataItem>, mso: CborMap = CborMap()) =
+        MdlDataElementValidator.validate(items = itemsOf(*elements), mso = mso, checkElementTypes = false)
 
     private fun assertInvalid(block: () -> Unit): ValidationException {
         val exception = assertThrows(ValidationException::class.java) { block() }

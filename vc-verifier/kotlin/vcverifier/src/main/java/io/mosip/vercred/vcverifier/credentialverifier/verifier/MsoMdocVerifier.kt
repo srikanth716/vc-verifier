@@ -320,12 +320,12 @@ internal class MsoMdocVerifier(
         verifyIssuingCountry(dsCertificate, items)
         verifyIssuingJurisdiction(dsCertificate, items)
         verifyIssueDate(mso, items)
-        // §3.4 mandatory presence is gated inside the validator to a fully disclosed mDL namespace.
+        // Only §3.1 (element types) is relaxed by the strict flag; §3.4 is gated inside the
+        // validator to a fully disclosed mDL namespace.
         MdlDataElementValidator.validate(
             items = items,
             mso = mso,
-            checkTypesAndStructure = options.strictMdlProfile,
-            checkMandatoryPresence = options.strictMdlProfile,
+            checkElementTypes = options.strictMdlProfile,
         )
     }
 

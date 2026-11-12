@@ -28,8 +28,12 @@ import java.util.logging.Logger
 /**
  * ISO/IEC 18013-5 Table 5 / 7.2.4 / 7.2.5 checks for the elements of namespace org.iso.18013.5.1.
  *
- * Runs only for docType org.iso.18013.5.1.mDL (MsoMdocVerifier skips it for other docTypes) and only
- * when the strict mDL profile is on.
+ * Runs only for docType org.iso.18013.5.1.mDL (MsoMdocVerifier skips it for other docTypes).
+ *
+ * Issue #300 §3: the temporary strict flag relaxes only §3.1 (element types, which Certify fails until
+ * inji-certify#1147). §3.2 driving_privileges structure, §3.3 Latin-1 text, §3.4 mandatory elements
+ * and §3.5 age consistency always run; in relaxed mode a value of the wrong type is skipped by them
+ * rather than reported, since reporting it is §3.1's job.
  */
 internal object MdlDataElementValidator {
 
@@ -109,16 +113,18 @@ internal object MdlDataElementValidator {
      * tell "hidden by the holder" from "never issued": an mDL from a non-conformant issuer that left a
      * mandatory element out of the MSO entirely still passes whenever the holder hides at least one
      * other element. This is not full coverage of the mandatory-element rule.
+     *
+     * @param checkElementTypes enables §3.1 (strict mDL profile); every other §3 check always runs.
      */
     fun validate(
         items: List<DecodedIssuerSignedItem>,
         mso: Map,
-        checkTypesAndStructure: Boolean,
-        checkMandatoryPresence: Boolean,
+        checkElementTypes: Boolean,
     ) {
         val mdlItems = items.filter { it.namespace == MDL_NAMESPACE }
 
-        if (checkMandatoryPresence && isMdlNamespaceFullyDisclosed(mdlItems, mso, emptyMeansFull = true)) {
+        // §3.4
+        if (isMdlNamespaceFullyDisclosed(mdlItems, mso, emptyMeansFull = true)) {
             val missing = MANDATORY_ELEMENTS - mdlItems.map { it.elementIdentifier }.toSet()
             if (missing.isNotEmpty()) {
                 logger.severe("Missing mandatory mDL elements: ${missing.sorted().joinToString()}")
@@ -129,15 +135,20 @@ internal object MdlDataElementValidator {
             }
         }
 
-        if (!checkTypesAndStructure) {
-            return
-        }
-
         val records = mdlItems.associate { it.elementIdentifier to it.elementValue }
         records.forEach { (identifier, value) ->
-            validateElementType(identifier, value)
+            when {
+                // §3.2
+                identifier == "driving_privileges" -> validateDrivingPrivileges(value)
+                // §3.3; a non-text value is a §3.1 type error, reported only when types are checked.
+                identifier in LATIN1_TEXT_ELEMENTS ->
+                    if (checkElementTypes || value is UnicodeString) requireLatin1Text(identifier, value)
+                // §3.1
+                checkElementTypes -> validateElementType(identifier, value)
+            }
         }
 
+        // §3.5
         validateAgeConsistency(records, mso)
     }
 
@@ -171,9 +182,9 @@ internal object MdlDataElementValidator {
         }.toSet()
     }
 
+    /** §3.1 types of every element except driving_privileges and the Latin-1 text fields (checked above). */
     private fun validateElementType(identifier: String, value: DataItem) {
         when {
-            identifier in LATIN1_TEXT_ELEMENTS -> requireLatin1Text(identifier, value)
             identifier in TEXT_ELEMENTS -> requireText(identifier, value)
             identifier in COUNTRY_CODE_ELEMENTS -> requireMatching(identifier, value, COUNTRY_CODE_PATTERN)
             identifier == "un_distinguishing_sign" ->
@@ -182,7 +193,6 @@ internal object MdlDataElementValidator {
             identifier in FULL_DATE_OR_TDATE_ELEMENTS -> requireFullDateOrTdate(identifier, value)
             identifier in BYTE_STRING_ELEMENTS || identifier.startsWith(BIOMETRIC_TEMPLATE_PREFIX) ->
                 requireByteString(identifier, value)
-            identifier == "driving_privileges" -> validateDrivingPrivileges(value)
             identifier in UNSIGNED_ELEMENTS -> requireUnsigned(identifier, value)
             AGE_OVER_PATTERN.matches(identifier) -> requireBoolean(identifier, value)
             // Unknown/domestic identifiers: type not enforced here.
@@ -260,8 +270,8 @@ internal object MdlDataElementValidator {
         val maxAge = ageAt(birthDate, latest)
 
         records["age_in_years"]?.let { ageItem ->
-            // Type already checked by validateElementType; compared as BigInteger so large values cannot wrap.
-            val declared = (ageItem as UnsignedInteger).value
+            // A wrong type is §3.1's error (strict only); compared as BigInteger so large values cannot wrap.
+            val declared = (ageItem as? UnsignedInteger)?.value ?: return@let
             if (declared < BigInteger.valueOf(minAge.toLong()) || declared > BigInteger.valueOf(maxAge.toLong())) {
                 logger.severe("age_in_years is outside $minAge..$maxAge")
                 throw ValidationException(ERROR_MESSAGE_INVALID_MDL_AGE, ERROR_CODE_INVALID_MDL_ELEMENT)
@@ -271,7 +281,11 @@ internal object MdlDataElementValidator {
         records.forEach { (identifier, value) ->
             val match = AGE_OVER_PATTERN.matchEntire(identifier) ?: return@forEach
             val threshold = match.groupValues[1].toInt()
-            val isOver = (value as SimpleValue).simpleValueType == SimpleValueType.TRUE
+            val isOver = when ((value as? SimpleValue)?.simpleValueType) {
+                SimpleValueType.TRUE -> true
+                SimpleValueType.FALSE -> false
+                else -> return@forEach // not a boolean: §3.1's error, reported only in strict mode
+            }
             val consistent = if (isOver) maxAge >= threshold else minAge < threshold
             if (!consistent) {
                 logger.severe("$identifier is inconsistent with birth_date")

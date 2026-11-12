@@ -43,8 +43,9 @@ class CredentialsVerifier {
 
     /**
      * @param mdocStrictProfile when [credentialFormat] is mso_mdoc, enforces mDL DS KeyUsage/EKU and
-     * ISO Table 5 field checks (issue #300). Defaults to true; Inji Verify and the wallet must pass
-     * false (via a config property) until Certify DS certificates conform (inji-certify#1132).
+     * ISO Table 5 element types (issue #300 §1.2 and §3.1 only; other mDL field checks always run).
+     * Defaults to true; Inji Verify and the wallet must pass false (via a config property) until
+     * inji-certify#1132 (DS EKU) and inji-certify#1147 (element types) are closed.
      */
     @JvmOverloads
     fun verify(

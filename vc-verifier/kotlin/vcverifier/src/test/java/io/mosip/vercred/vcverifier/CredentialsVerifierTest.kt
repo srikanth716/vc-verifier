@@ -244,7 +244,7 @@ class CredentialsVerifierTest {
 
     @Test
     @Timeout(value = 20, unit = TimeUnit.SECONDS)
-    fun `should skip mDL field checks when mdocStrictProfile is false`() {
+    fun `should skip mDL element type checks when mdocStrictProfile is false`() {
         // Text portrait, as Certify issues it until inji-certify#1147 item 6.
         val credential = MsoMdocTestCredentialFactory.create(
             records = MsoMdocTestCredentialFactory.recordsWith("portrait", UnicodeString("base64-portrait"))
@@ -257,6 +257,24 @@ class CredentialsVerifierTest {
         val relaxed = CredentialsVerifier().verify(credential, MSO_MDOC, mdocStrictProfile = false)
         assertTrue(relaxed.verificationStatus)
         assertEquals("", relaxed.verificationErrorCode)
+    }
+
+    @Test
+    @Timeout(value = 20, unit = TimeUnit.SECONDS)
+    fun `should still enforce mDL mandatory elements and Latin-1 text when mdocStrictProfile is false`() {
+        // The flag relaxes only issue #300 §1.2 and §3.1.
+        val missingPortrait = MsoMdocTestCredentialFactory.create(
+            records = MsoMdocTestCredentialFactory.recordsWithout("portrait")
+        )
+        val nonLatin1Name = MsoMdocTestCredentialFactory.create(
+            records = MsoMdocTestCredentialFactory.recordsWith("family_name", UnicodeString("日本"))
+        )
+
+        listOf(missingPortrait, nonLatin1Name).forEach { credential ->
+            val result = CredentialsVerifier().verify(credential, MSO_MDOC, mdocStrictProfile = false)
+            assertFalse(result.verificationStatus)
+            assertEquals(ERROR_CODE_INVALID_MDL_ELEMENT, result.verificationErrorCode)
+        }
     }
 
     @Test
